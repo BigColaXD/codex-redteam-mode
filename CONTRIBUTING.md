@@ -19,11 +19,14 @@
 
 ## Current Thanks
 
-感谢米斯特安全团队的浩熙大佬提出的修改意见：加入语义判定。  
+5.7 感谢米斯特安全团队的浩熙大佬提出的修改意见：加入语义判定。  
 浩熙X：@xishan12509850
 
-感谢Nirvana提出的修改意见：优化工作流程，实现覆盖安装
+5.11 感谢Nirvana提出的修改意见：优化工作流程，实现覆盖安装
 Nirvana X：@Nirvana_543
+
+5.14感谢米斯特安全团队的浩熙大佬提出的修改意见：细分skill，让AI在工作阶段更智能（未实装）。  
+浩熙X：@xishan12509850
 
 感谢qiushi-skill、hack-skills与Anthropic-Cybersecurity-Skills提供的方法层、技术路由层与技能包结构参考。参考
 项目：qiushi-skill//yaklang/hack-skillsmukul975/Anthropic-Cybersecurity-Skills
