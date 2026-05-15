@@ -3,6 +3,7 @@
 English | [中文](./README_ZH.md)
 
 > **Normal by default. Offensive only when explicitly armed.**
+> There are still issues with the installation script. Please configure it manually (or have codex configure it).
 
 A lightweight, phase-aware red-team operating profile for Codex.
 
