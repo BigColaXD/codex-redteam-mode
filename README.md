@@ -8,14 +8,6 @@ This is a lightweight, pack-first red team runtime/configuration layer for Codex
 
 Its goal is not to turn Codex into an automated attack platform.
 
-## Project Description
-
-- This repository is a **general GitHub repository**
-
-- It should not contain personal local paths, private target data, or user-specific tool preferences.
-
-- Documentation descriptions must be consistent with the current actual runtime behavior and cannot be written as "what is planned".
-
 ## Why Do This Project?
 
 Many "persistent red team hints" ultimately lead to two bad outcomes:
