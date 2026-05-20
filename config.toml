@@ -1,2 +1,3 @@
 # Codex red-team profile
-model_instructions_file = './instruction.ctf.md'
+# This path is resolved by Codex; ~/.codex/ is where install.py places instruction.ctf.md
+model_instructions_file = "~/.codex/instruction.ctf.md"
