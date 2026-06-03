@@ -91,10 +91,13 @@ def save_state(state: RedTeamState, session_id: str | None = None) -> None:
     state.last_changed = now_iso()
     directory = state_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    state_path(session_id or state.session_id or "global").write_text(
+    target = state_path(session_id or state.session_id or "global")
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(
         json.dumps(asdict(state), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    tmp.replace(target)
 
 
 def reset_state(session_id: str | None = None) -> RedTeamState:

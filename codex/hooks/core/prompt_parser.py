@@ -41,34 +41,55 @@ def load_payload(raw: str) -> Any:
     return json.loads(raw)
 
 
+def _extract_content(item: dict) -> str:
+    content = item.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                parts.append(block["text"])
+        return "\n".join(parts)
+    return ""
+
+
+def _is_user_message(item: dict) -> bool:
+    role = item.get("role", "")
+    if role in ("user", "human"):
+        return True
+    if item.get("type") == "user":
+        return True
+    return False
+
+
 def extract_prompt(payload: Any) -> str:
     if isinstance(payload, str):
         return payload
     if not isinstance(payload, dict):
         return ""
+
     for key in ("prompt", "input", "text", "message", "user_prompt"):
         val = payload.get(key)
         if isinstance(val, str):
             return val
+
     messages = payload.get("messages")
     if isinstance(messages, list):
-        parts: list[str] = []
-        for item in messages:
+        for item in reversed(messages):
             if not isinstance(item, dict):
                 continue
-            content = item.get("content")
-            if isinstance(content, str):
-                parts.append(content)
-            elif isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and isinstance(block.get("text"), str):
-                        parts.append(block["text"])
-        return "\n".join(parts)
+            if _is_user_message(item):
+                content = _extract_content(item)
+                if content.strip():
+                    return content
+        return ""
+
     return ""
 
 
 SESSION_ID_KEYS = (
-    "session_id","sessionId","thread_id","threadId","conversation_id","conversationId","chat_id","chatId","id",
+    "session_id","sessionId","thread_id","threadId","conversation_id","conversationId","chat_id","chatId",
 )
 
 

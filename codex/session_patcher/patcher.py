@@ -19,6 +19,14 @@ MOCK_RESPONSE = (
     "请提供下一步指令。"
 )
 
+_AI_REWRITE_IMPORT_ERROR = None
+try:
+    from hooks.core.llm_client import generate_rewrite as _ai_generate_rewrite, is_configured as _ai_is_configured
+except Exception as _e:
+    _AI_REWRITE_IMPORT_ERROR = str(_e)
+    def _ai_generate_rewrite(*args, **kwargs): return None
+    def _ai_is_configured(): return False
+
 BACKUP_KEEP_COUNT = 5
 
 
@@ -96,6 +104,8 @@ def clean_session(
     show_content: bool = False,
     mock_response: Optional[str] = None,
     clean_reasoning: bool = True,
+    dry_run: bool = False,
+    use_ai: bool = True,
 ) -> Tuple[List[Dict[str, Any]], bool, List[ChangeDetail]]:
     """Clean a Codex JSONL session file.
 
@@ -105,6 +115,11 @@ def clean_session(
         show_content: Include original/new content in change details.
         mock_response: Replacement text for refusal responses.
         clean_reasoning: Remove reasoning/thinking blocks.
+        dry_run: Preview changes without modifying the in-memory result.
+            When True, returns the original lines with change details populated
+            so callers can inspect what WOULD change without applying it.
+        use_ai: Attempt AI-powered contextual rewrite for refusal replacements.
+            Falls back to mock_response if AI is not configured or fails.
 
     Returns:
         (cleaned_lines, was_modified, change_details)
@@ -148,11 +163,20 @@ def clean_session(
         else:
             refusal_groups.append((msg_idx, []))
 
-    # 3. Replace refusals
+    # 3. Replace refusals (with optional AI rewrite)
     for primary_idx, companion_idxs in refusal_groups:
         primary_msg = lines[primary_idx]
         content = _extract_text_from_codex_msg(primary_msg)
         all_lines = sorted([primary_idx + 1] + [i + 1 for i in companion_idxs])
+
+        replacement = mock_response
+        ai_used = False
+        if use_ai:
+            context = _extract_context_for_rewrite(lines, primary_idx)
+            ai_result = _try_ai_rewrite(content, context)
+            if ai_result:
+                replacement = ai_result
+                ai_used = True
 
         change = ChangeDetail(
             line_num=primary_idx + 1,
@@ -161,12 +185,14 @@ def clean_session(
         )
         if show_content:
             change.original_content = content[:500] + ("..." if len(content) > 500 else "")
-            change.new_content = mock_response
+            suffix = " [AI]" if ai_used else ""
+            change.new_content = replacement + suffix
         changes.append(change)
 
-        lines[primary_idx] = _update_text_in_codex_msg(primary_msg, mock_response)
-        for cidx in companion_idxs:
-            lines[cidx] = _update_text_in_codex_msg(lines[cidx], mock_response)
+        if not dry_run:
+            lines[primary_idx] = _update_text_in_codex_msg(primary_msg, replacement)
+            for cidx in companion_idxs:
+                lines[cidx] = _update_text_in_codex_msg(lines[cidx], replacement)
         modified = True
 
     # 4. Remove reasoning blocks (independent response_item rows)
@@ -184,8 +210,9 @@ def clean_session(
                         summary = payload.get("summary", "")
                         change.original_content = str(summary)[:100]
                     changes.append(change)
-                    modified = True
-                    continue
+                    if not dry_run:
+                        modified = True
+                        continue
             new_lines.append(line)
         lines = new_lines
 
@@ -209,6 +236,65 @@ def save_session(lines: List[Dict[str, Any]], file_path: str) -> None:
         for line in lines:
             cleaned = {k: v for k, v in line.items() if not k.startswith("_")}
             f.write(json.dumps(cleaned, ensure_ascii=False) + "\n")
+
+
+def _extract_context_for_rewrite(lines: List[Dict[str, Any]], refusal_index: int, max_messages: int = 5) -> list[str]:
+    """Walk backward from the refusal to collect conversation context for AI rewrite."""
+    context: list[str] = []
+    for i in range(refusal_index - 1, max(0, refusal_index - max_messages * 2) - 1, -1):
+        if i < 0 or i >= len(lines):
+            break
+        line = lines[i]
+        line_type = line.get("type", "")
+        payload = line.get("payload", {})
+        role = payload.get("role", "")
+
+        if line_type == "response_item" and role == "user":
+            content = payload.get("content", "")
+            if isinstance(content, list):
+                texts = []
+                for item in content:
+                    if isinstance(item, dict):
+                        texts.append(item.get("text", item.get("input_text", "")))
+                content = "\n".join(t for t in texts if t)
+            elif isinstance(content, str):
+                pass
+            else:
+                content = ""
+            if content:
+                context.append(f"[User] {content[:2000]}")
+
+        elif line_type == "response_item" and role == "assistant":
+            content = _extract_text_from_codex_msg(line)
+            if content:
+                context.append(f"[Assistant] {content[:2000]}")
+
+        elif line_type == "event_msg":
+            pt = payload.get("type", "")
+            msg = payload.get("message", "")
+            if pt == "agent_message" and msg:
+                context.append(f"[User] {msg[:2000]}")
+
+        if len(context) >= max_messages:
+            break
+
+    context.reverse()
+    return context
+
+
+def _try_ai_rewrite(refusal_content: str, context: list[str]) -> str | None:
+    """Attempt AI-powered rewrite. Returns None if not configured or on failure."""
+    if _AI_REWRITE_IMPORT_ERROR is not None:
+        return None
+    if not _ai_is_configured():
+        return None
+    try:
+        result = _ai_generate_rewrite(refusal_content, context)
+        if result and len(result.strip()) >= 10:
+            return result.strip()
+    except Exception:
+        pass
+    return None
 
 
 def list_session_files(session_dir: Optional[str] = None) -> List[Path]:

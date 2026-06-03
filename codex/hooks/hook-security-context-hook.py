@@ -11,7 +11,7 @@ for candidate in (HOOKS_DIR, CODEX_DIR):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from core import build_prompt_overlay, build_route_envelope, detect_phase, emit_hook_json, extract_prompt, extract_session_id, load_runtime_state, parse_mode_command, parse_opsec_command, save_runtime_state
+from core import build_prompt_overlay, build_route_envelope, build_sanitizer_context, detect_phase, emit_hook_json, extract_prompt, extract_session_id, load_runtime_state, parse_mode_command, parse_opsec_command, save_runtime_state
 from core.prompt_parser import decode_stdin, load_payload
 from router import select_leaf_skill, select_method, select_router, select_skill_pack, select_subphase
 
@@ -63,6 +63,11 @@ def main() -> None:
     context = build_route_envelope(state)
     overlay = build_prompt_overlay(CODEX_DIR, phase)
     if overlay: context = f"{context}\n{overlay}"
+
+    sanitizer_ctx = build_sanitizer_context(prompt)
+    if sanitizer_ctx:
+        context = f"{sanitizer_ctx}\n{context}"
+
     print(emit_hook_json("UserPromptSubmit", context))
 
 if __name__ == "__main__":
