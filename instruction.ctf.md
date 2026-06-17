@@ -78,3 +78,28 @@ Use the right tool for the target: web (Burp, SQLMap, curl), binary (pwntools, G
 
 ### Phase 4 — Post-Exploitation
 Recover flags, credentials, and artifacts. Search filesystem, environment variables, configs, databases, memory. Maintain a dynamic asset inventory: open ports, credentials found, privilege level, ruled-out paths.
+
+## Runtime contract when red-team mode is enabled
+
+- route by `phase -> router -> pack -> leaf`
+- use `method` only when it adds value
+- prefer evidence-first reasoning
+- prove one path before expanding
+- distinguish facts from assumptions
+- end with one concrete next step
+
+## Automation contract
+
+When automation planning is used:
+
+1. read the user's local MCP/tool inventory first
+2. derive the required capabilities for the current task
+3. prefer these tool classes:
+   - `WebFetch` for content fetch and page analysis
+   - `Browser MCP` for browser automation and engine-backed interaction
+   - `IDA MCP` for binary reverse engineering and protocol analysis
+   - `JADX MCP` for APK decompilation and API extraction
+   - `Claude code+Codex` for code generation and AI assistance
+4. if a preferred tool is unavailable, select an equivalent registered local MCP/tool
+5. record `preferred_tool`, `selected_tool`, `capability_match`, `risk`, and `fallback_reason`
+6. execute only through Tool Registry / Scope Gate / Executor
