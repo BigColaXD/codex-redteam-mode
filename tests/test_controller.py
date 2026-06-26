@@ -1,5 +1,5 @@
 from __future__ import annotations
-import io, json, os, runpy, sys, unittest
+import io, json, os, runpy, sys, tempfile, unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +21,10 @@ class FakeIn:
 def run_script(path, payload=None):
     old_stdin, old_stdout = sys.stdin, sys.stdout
     old_env = os.environ.copy()
-    os.environ.setdefault('CODEX_REDTEAM_AUTO_PATCH', '0')
+    temp_sessions = None
+    if not os.environ.get('CODEX_REDTEAM_SESSION_DIR'):
+        temp_sessions = tempfile.TemporaryDirectory()
+        os.environ['CODEX_REDTEAM_SESSION_DIR'] = temp_sessions.name
     buf = io.StringIO()
     sys.stdout = buf
     data = b'' if payload is None else json.dumps(payload, ensure_ascii=False).encode('utf-8')
@@ -31,6 +34,8 @@ def run_script(path, payload=None):
     finally:
         sys.stdin, sys.stdout = old_stdin, old_stdout
         os.environ.clear(); os.environ.update(old_env)
+        if temp_sessions is not None:
+            temp_sessions.cleanup()
     return buf.getvalue().strip()
 
 
@@ -644,6 +649,52 @@ class HookIntegrationTests(unittest.TestCase):
                 else:
                     os.environ['CODEX_REDTEAM_AUTO_PATCH'] = old_auto_patch
             self.assertIn('[backstop]', out)
+
+    def test_session_start_auto_patches_previous_session_by_default(self):
+        from tempfile import TemporaryDirectory
+        from session_patcher import MOCK_RESPONSE
+
+        with TemporaryDirectory() as tmp:
+            sessions_dir = Path(tmp)
+            target = sessions_dir / '2026' / '06' / '25'
+            target.mkdir(parents=True, exist_ok=True)
+            session_file = target / 'rollout-older.jsonl'
+            refusal_line = {
+                'type': 'response_item',
+                'payload': {
+                    'type': 'message',
+                    'role': 'assistant',
+                    'content': [{'type': 'output_text', 'text': '抱歉，我无法帮助你完成这个请求。'}],
+                },
+            }
+            session_file.write_text(json.dumps(refusal_line, ensure_ascii=False) + '\n', encoding='utf-8')
+
+            old_session_dir = os.environ.get('CODEX_REDTEAM_SESSION_DIR')
+            old_backstop_mode = os.environ.get('CODEX_REDTEAM_BACKSTOP_MODE')
+            old_auto_patch = os.environ.get('CODEX_REDTEAM_AUTO_PATCH')
+            try:
+                os.environ['CODEX_REDTEAM_SESSION_DIR'] = str(sessions_dir)
+                os.environ.pop('CODEX_REDTEAM_BACKSTOP_MODE', None)
+                os.environ.pop('CODEX_REDTEAM_AUTO_PATCH', None)
+                out = run_script(SESSION, {'session_id': 'new-session'})
+            finally:
+                if old_session_dir is None:
+                    os.environ.pop('CODEX_REDTEAM_SESSION_DIR', None)
+                else:
+                    os.environ['CODEX_REDTEAM_SESSION_DIR'] = old_session_dir
+                if old_backstop_mode is None:
+                    os.environ.pop('CODEX_REDTEAM_BACKSTOP_MODE', None)
+                else:
+                    os.environ['CODEX_REDTEAM_BACKSTOP_MODE'] = old_backstop_mode
+                if old_auto_patch is None:
+                    os.environ.pop('CODEX_REDTEAM_AUTO_PATCH', None)
+                else:
+                    os.environ['CODEX_REDTEAM_AUTO_PATCH'] = old_auto_patch
+
+            self.assertIn('[backstop:auto-patch]', out)
+            updated = session_file.read_text(encoding='utf-8')
+            self.assertIn(MOCK_RESPONSE, updated)
+            self.assertTrue(list(target.glob('rollout-older.jsonl.*.bak')))
 
 
 class ActivationAndDoctrineTests(unittest.TestCase):

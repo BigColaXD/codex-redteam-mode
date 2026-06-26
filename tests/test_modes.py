@@ -1,13 +1,13 @@
 from __future__ import annotations
-import io, json, runpy, sys, unittest
+import io, json, os, runpy, sys, tempfile, unittest
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]; HOOK=ROOT/'codex'/'hooks'/'hook-security-context-hook.py'; SESSION=ROOT/'codex'/'hooks'/'session-start-context.py'
 class FakeIn:
     def __init__(self,b): self.buffer=io.BytesIO(b)
 def run_script(path, payload=None):
-    old_stdin, old_stdout=sys.stdin, sys.stdout; buf=io.StringIO(); sys.stdout=buf; data=b'' if payload is None else json.dumps(payload, ensure_ascii=False).encode('utf-8'); sys.stdin=FakeIn(data)
+    old_stdin, old_stdout=sys.stdin, sys.stdout; old_env=os.environ.copy(); temp_sessions=tempfile.TemporaryDirectory(); os.environ['CODEX_REDTEAM_SESSION_DIR']=temp_sessions.name; buf=io.StringIO(); sys.stdout=buf; data=b'' if payload is None else json.dumps(payload, ensure_ascii=False).encode('utf-8'); sys.stdin=FakeIn(data)
     try: runpy.run_path(str(path), run_name='__main__')
-    finally: sys.stdin, sys.stdout = old_stdin, old_stdout
+    finally: sys.stdin, sys.stdout = old_stdin, old_stdout; os.environ.clear(); os.environ.update(old_env); temp_sessions.cleanup()
     return buf.getvalue().strip()
 class HookTests(unittest.TestCase):
     def test_session_and_clean_mode(self):
