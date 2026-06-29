@@ -4,6 +4,26 @@ All notable changes to the Codex Red Team Opt-In Mode project.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0] - 2026-06-28
+
+### Changed - Loop Runtime Redesign (P0-P7)
+
+- **Architecture**: Replaced multi-knowledge-card system (YAML/JSON runtime cards + references/) with lightweight Loop Runtime. Each skill is now a single `SKILL.md` domain card following Observe -> Decide -> Act -> Verify -> Record -> Next flow.
+- **SKILL.md format**: Unified domain card with sections: `## Domain`, `## Boundaries`, `## Pivot Hints`, `## Exit Evidence`. Replaces `skill_card.yaml`, `skill_card.json`, and `references/` directories.
+- **Graded feedback gates**: Introduced four-level gate system (`pass` / `soft_fail` / `pivot` / `blocked`) replacing binary pass/fail.
+- **skill_card.py**: Rewritten to parse only SKILL.md (Markdown-native, no YAML/JSON dependency).
+- **install.py**: New `copy_skill_md()` function copies only SKILL.md per skill directory instead of entire directory trees. Version bumped to 1.0.0.
+- **install.py**: Directory copy now excludes Python cache files (`__pycache__`, `.pyc`, `.pyo`) so overlay installs stay clean even if the source tree contains local caches.
+- **34 skill directories**: All converted to Loop Runtime SKILL.md format. Legacy YAML/JSON runtime cards and references directories are removed from `agents/skills/`.
+- **brain.py**: Rewritten to 5-phase framework (recon -> test -> hypothesis -> verify -> report) with `phase_drive` orchestrator and per-domain halt mechanism.
+- **Tool modules**: 5-module upgrade: `recon_ports`, `recon_subdomains`, `recon_directories` (upgraded), `vuln_scanner`, `sqli_detector` (new).
+- **README.md / README_ZH.md**: Updated to describe Loop Runtime SKILL.md architecture, graded gates, and new installer behavior.
+
+### Removed
+
+- `skill_card.yaml`, `skill_card.yml`, and `skill_card.json` files under `agents/skills/`.
+- `references/` directories under `agents/skills/`.
+
 ## [0.6.0] - 2026-06-22
 
 ### Added
@@ -101,6 +121,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Managed incremental installer for Python and PowerShell.
 - Reference method layer and technology routing layer from three external skill repositories.
 
+[1.0.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.0.0
 [0.6.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.6.0
 [0.5.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.5.0
 [0.4.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.4.0

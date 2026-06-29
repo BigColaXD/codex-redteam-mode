@@ -2,9 +2,11 @@
 
 [中文说明](./README_ZH.md)
 
+**Current release:** v1.0.0
+
 > Normal by default. Red-team routing and automation are opt-in only.
 
-A lightweight, pack-first red team runtime/configuration layer for Codex. Ordinary coding, documentation, and research tasks stay in normal mode unless the user explicitly enables red-team mode.
+A lightweight, evidence-driven red team runtime/configuration layer for Codex. Ordinary coding, documentation, and research tasks stay in normal mode unless the user explicitly enables red-team mode. When enabled, Loop Runtime SKILL.md domain cards declare scope, boundaries, and exit evidence — not instructions.
 
 ## Why This Project
 
@@ -13,7 +15,7 @@ Two common pitfalls in AI-assisted security work:
 1. **Pollution of normal operations** — persistent red-team hints or system prompts bleed into everyday coding, causing refusals or unwanted behavior.
 2. **Context bloat** — heavy injection of offensive doctrine increases token cost without improving routing quality.
 
-This project solves both: **normal mode stays normal**, and red-team mode must be explicitly enabled. When enabled, it provides compact, testable routing through a `phase → router → pack → leaf` mainline — not a monolithic prompt dump.
+This project solves both: **normal mode stays normal**, and red-team mode must be explicitly enabled. When enabled, SKILL.md Loop Runtime domain cards declare scope, boundaries, and exit evidence, while the 5-Phase engine drives evidence-based progression — not a monolithic prompt dump.
 
 ## Core Features
 
@@ -21,6 +23,8 @@ This project solves both: **normal mode stays normal**, and red-team mode must b
 - **Structured JSON runtime state** with session-isolated state files
 - **Rule-first phase detection** with semantic fallback for ambiguous tasks
 - **Pack-first routing mainline**: `phase → router → pack → leaf` — method is a soft hint, not the primary routing axis
+- **SKILL.md Loop Runtime domain cards** — pure Markdown `scope-not-instruct` format: each card has `## Domain` (scope declaration), `## Boundaries` (forbidden actions), `## Pivot Hints` (direction changes), `## Exit Evidence` (required artifacts and minimum attempts) — no YAML, no JSON
+- **Graded feedback gates** — four-level gate decisions: `pass` (advance), `soft_fail` (retry/adjust), `pivot` (change path), `blocked` (halt for human)
 - **Dedicated routing layer** — regex-based router engine (Chinese + English patterns), fine-grained sub-routers per domain (5 web, 4 AD, 6 crypto, 5 network, 3 mobile), external skill adapters (ACS/hackskills/qiushi)
 - **Lightweight hooks** — activation engine, context prepoison, intent engine, loop engine, phase detector, semantic fallback, state manager, refusal backstop
 - **Session patcher** — two-tier refusal detector (strong phrases + weak openers in Chinese + English), JSONL session cleaner with auto-backup and optional AI-powered rewrite
@@ -106,7 +110,7 @@ python scripts/install.py --uninstall
 2. **Core files** — copies `instruction.ctf.md` and `config.toml` to `~/.codex/`
 3. **Hooks** — deploys `session-start-context.py`, `hook-security-context-hook.py`, `redteam_state.py`, and `core/` to `~/.codex/hooks/`
 4. **Subsystems** — deploys `router/`, `orchestrator/`, `automation/`, and `session_patcher/` to `~/.codex/`
-5. **Skill packs** — deploys all 18 detail packs from `agents/skills/` to `~/.agents/skills/`
+5. **Skill packs** — deploys all 34 SKILL.md domain cards from `agents/skills/` to `~/.agents/skills/` (only `SKILL.md` is copied per skill directory)
 6. **Seed prompts** — copies prompt files to `~/.codex/prompts/` (skips existing)
 7. **Merge hooks.json** — strips old managed hooks, then injects the current `SessionStart` and `UserPromptSubmit` hooks (preserves user-defined hooks)
 8. **Merge AGENTS.md** — injects or updates a managed block (`<!-- codex-redteam-optin-mode:start -->`) into `~/.codex/AGENTS.md` (preserves user content outside the block)
@@ -117,10 +121,11 @@ python scripts/install.py --uninstall
 
 The installer is **idempotent** — running it repeatedly is safe and will not duplicate hooks or AGENTS.md blocks.
 
-On each run, it reads the previous manifest, **deletes every file from the old version**, then re-deploys from the current version. This means:
-- Version upgrades are clean: no stale files linger between versions
-- `copy_tree` replaces entire directories (`router/`, `orchestrator/`, etc.) wholesale
+On each run, it reads the previous manifest, removes only project-managed files from the old install, then re-deploys from the current version. This means:
+- Version upgrades are clean without touching user-owned files
+- `copy_tree` replaces managed directories (`router/`, `orchestrator/`, etc.) wholesale; skill directories copy only `SKILL.md`
 - `AGENTS.md` and `hooks.json` are never deleted — they use managed-block merge logic so user customizations survive
+- Python cache files (`__pycache__`, `.pyc`, `.pyo`) are not copied into the installed runtime
 - If the manifest is missing, the installer falls back to cleaning the current target set plus known legacy paths
 
 ```bash
