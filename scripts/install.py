@@ -11,9 +11,18 @@ def good(msg:str)->None: print(color(f'[OK] {msg}','32'))
 def manifest_path(codex_home:Path)->Path: return codex_home/'redteam-install-manifest.json'
 def detect_codex_home(explicit:str|None)->Path: return Path(explicit).expanduser() if explicit else Path(os.environ.get('CODEX_HOME') or (Path.home()/'.codex'))
 def detect_agents_home(explicit:str|None)->Path: return Path(explicit).expanduser() if explicit else Path.home()/'.agents'
+def _is_within(path:Path,*roots:Path)->bool:
+    resolved=path.resolve()
+    return any(resolved == root.resolve() or str(resolved).startswith(str(root.resolve())+os.sep) for root in roots if root)
+
+_SAFE_ROOTS:list[Path]=[]
+
 def remove_path(path:Path,dry_run:bool)->None:
     info(f'remove {path}')
     if dry_run or not path.exists(): return
+    if _SAFE_ROOTS and not _is_within(path, *_SAFE_ROOTS):
+        info(f'SKIP remove {path} — outside safe boundaries ({[str(r) for r in _SAFE_ROOTS]})')
+        return
     shutil.rmtree(path) if path.is_dir() else path.unlink()
 def copy_file(src:Path,dst:Path,dry_run:bool)->None:
     info(f'copy {src} -> {dst}')
@@ -133,6 +142,7 @@ def uninstall(repo_root:Path,codex_home:Path,agents_home:Path,dry_run:bool)->Non
 def main()->None:
     parser=argparse.ArgumentParser(); parser.add_argument('--codex-home'); parser.add_argument('--agents-home'); parser.add_argument('--dry-run', action='store_true'); parser.add_argument('--uninstall', action='store_true'); args=parser.parse_args()
     repo_root=Path(__file__).resolve().parents[1]; codex_home=detect_codex_home(args.codex_home); agents_home=detect_agents_home(args.agents_home)
+    _SAFE_ROOTS.extend([codex_home, agents_home, repo_root])
     info(f'platform: {platform.system()}'); info(f'codex home: {codex_home}'); info(f'agents home: {agents_home}')
     current_targets=managed_targets(repo_root,codex_home,agents_home)
     if args.uninstall: uninstall(repo_root,codex_home,agents_home,args.dry_run); good('uninstall complete'); return

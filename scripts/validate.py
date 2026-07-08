@@ -76,7 +76,36 @@ OPTIONAL_CODEX_FILES = [
 REQUIRED_SKILL_IDS = [
     "redteam-recon-intake",
     "redteam-cve-lookup",
+    "redteam-cve-validation",
 ]
+
+
+def _skill_frontmatter(skill_md: Path) -> dict[str, str]:
+    text = skill_md.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    result: dict[str, str] = {}
+    for line in parts[1].splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        result[key.strip()] = value.strip().strip('"').strip("'")
+    return result
+
+
+def check_skill_metadata(skill_md: Path, expected_name: str) -> Tuple[bool, str]:
+    meta = _skill_frontmatter(skill_md)
+    if not meta:
+        return False, f"  FAIL {expected_name}/SKILL.md missing YAML frontmatter"
+    if meta.get("name") != expected_name:
+        return False, f"  FAIL {expected_name}/SKILL.md name mismatch: {meta.get('name')!r}"
+    if not meta.get("description"):
+        return False, f"  FAIL {expected_name}/SKILL.md missing description"
+    return True, f"  OK  {expected_name}/SKILL.md metadata"
 
 
 def _codex_root(codex_home: Path) -> Path:
@@ -209,8 +238,19 @@ def validate_install(codex_home: Path) -> Tuple[bool, List[str]]:
             skill_md = skills_dir / skill_id / "SKILL.md"
             if skill_md.exists():
                 messages.append(f"  OK  {skill_id}/SKILL.md")
+                ok, msg = check_skill_metadata(skill_md, skill_id)
+                messages.append(msg)
+                if not ok:
+                    all_ok = False
             else:
                 messages.append(f"  MISS {skill_id}/SKILL.md")
+                all_ok = False
+
+        for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+            skill_id = skill_md.parent.name
+            ok, msg = check_skill_metadata(skill_md, skill_id)
+            if not ok:
+                messages.append(msg)
                 all_ok = False
 
         legacy_cards = (
