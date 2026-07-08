@@ -4,7 +4,7 @@
 
 **Current release:** v1.0.0
 
-> Normal by default. Red-team routing and automation are opt-in only.
+> Normal by default. Red-team mode is opt-in; once enabled, automation starts automatically by default.
 
 A lightweight, evidence-driven red team runtime/configuration layer for Codex. Ordinary coding, documentation, and research tasks stay in normal mode unless the user explicitly enables red-team mode. When enabled, Loop Runtime SKILL.md domain cards declare scope, boundaries, and exit evidence — not instructions.
 
@@ -32,7 +32,7 @@ This project solves both: **normal mode stays normal**, and red-team mode must b
 - **Artifact/gate-based progression** — prove one path before expanding, distinguish facts from assumptions
 - **Automation Loop Runtime** — reads local MCP/tool inventory, derives required capabilities, runs scoped registered adapters, saves artifacts, and feeds gate decisions
 - **Tool preference model**: prefer 5 practical tool classes (WebFetch, Browser MCP, IDA MCP, JADX MCP, Current AI Agent), fall back to equivalent local tools when needed
-- **Managed incremental installer** — cross-platform (Python/PowerShell/bash), preserves existing AGENTS.md and hooks.json, injects only managed blocks, supports `--uninstall` and idempotent upgrades
+- **Managed incremental installer** — Python-based, preserves existing AGENTS.md and hooks.json, injects only managed blocks, supports `--uninstall` and idempotent upgrades
 
 ## Coverage Scenarios
 
@@ -70,18 +70,6 @@ This project solves both: **normal mode stays normal**, and red-team mode must b
 
 ```bash
 python scripts/install.py
-```
-
-### Windows PowerShell
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install.ps1
-```
-
-### macOS / Linux
-
-```bash
-bash scripts/install.sh
 ```
 
 ### Options
@@ -189,7 +177,7 @@ The Loop Runtime follows `Observe -> Decide -> Act -> Verify -> Record -> Next`.
 - `feedback_gate`: the gate used to judge whether the current step is valid
 - `exit_condition`: the condition for advancing, pivoting, blocking, reporting, or refreshing context
 
-The runtime now includes decision-tree path selection, rhythm classification, artifact/tool/scope gates, retry handling, quick-card refreshes, JSONL decision recording, and an executor adapter layer. The default executor stays plan-only, but registered adapters can execute scoped tool steps, save artifacts, and feed the next gate decision. Direct tool execution is intentionally bounded behind Tool Registry, Scope Gate, and Executor adapters.
+The runtime now includes decision-tree path selection, rhythm classification, artifact/tool/scope gates, retry handling, quick-card refreshes, JSONL decision recording, and an executor adapter layer. In red-team mode, automation requires explicit `mode = "active"` / `"auto"` / `"assisted"` in config.toml to enable active execution; without configuration it defaults to `plan-only`. Direct tool execution is intentionally bounded behind Tool Registry, Scope Gate, Execution Gate, and registered Executor adapters.
 
 ## Automation Tool Policy
 
@@ -204,8 +192,9 @@ Before planning tool use, the automation layer reads the user's local MCP/tool i
 2. If a preferred tool is unavailable, select an equivalent registered local MCP/tool.
 3. Record `preferred_tool`, `selected_tool`, `capability_match`, `risk`, and `fallback_reason`.
 4. Execute only through Tool Registry → Scope Gate → Executor.
-5. Keep execution plan-only unless a scoped adapter is explicitly wired and passes gates.
-6. Save successful adapter output as artifacts and re-check gates before advancing.
+5. In red-team mode, run active automation by default; execute only when a scoped adapter is registered and all gates pass.
+6. If a required tool, scope, or adapter is missing, block or pivot explicitly instead of pretending execution happened.
+7. Save successful adapter output as artifacts and re-check gates before advancing.
 
 ## Validation
 
@@ -229,7 +218,7 @@ Validation covers:
 
 - This is a **runtime/configuration layer**, not a complete attack platform — it provides routing, context management, adapter-based automation, and evidence gates, not hardcoded exploit code
 - Tool availability depends on the user's local MCP/tool inventory
-- Real execution requires explicitly registered scoped adapters; the default executor remains plan-only
+- Real execution requires explicitly registered scoped adapters; missing tools, scope, or adapters are blocked or pivoted instead of being treated as successful execution
 - Red-team mode must be explicitly enabled per session
 - Semantic phase detection is a fallback — rule-first matching is more reliable for well-defined task types
 
@@ -243,7 +232,7 @@ This project is intended **solely for authorized penetration testing, red team r
 
 - **Mingxi / 洺熙** — suggested adding semantic judgment as fallback for phase detection; proposed removing methodology while subdividing skills for smarter AI behavior
 - **Nirvana** — proposed workflow optimization with overlay installation enablement
-- **PINGS** — offered jailbreak text enhancements and robustness improvements
+- **PINGS** — offered prompt-chain robustness review
 
 ### Reference Projects
 

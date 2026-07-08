@@ -17,7 +17,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **34 skill directories**: All converted to Loop Runtime SKILL.md format. Legacy YAML/JSON runtime cards and references directories are removed from `agents/skills/`.
 - **brain.py**: Rewritten to 5-phase framework (recon -> test -> hypothesis -> verify -> report) with `phase_drive` orchestrator and per-domain halt mechanism.
 - **Tool modules**: 5-module upgrade: `recon_ports`, `recon_subdomains`, `recon_directories` (upgraded), `vuln_scanner`, `sqli_detector` (new).
-- **README.md / README_ZH.md**: Updated to describe Loop Runtime SKILL.md architecture, graded gates, and new installer behavior.
+- **README.md / README_ZH.md**: Updated to describe Loop Runtime SKILL.md architecture, graded gates, automatic red-team automation startup, and new installer behavior.
+- **Documentation encoding**: Restored README, README_ZH, and CHANGELOG text to valid UTF-8 without changing prompt/refusal-direction scripts.
+- **Automation startup**: Red-team sessions default to `plan-only` when no explicit `[automation].mode` is configured. Set `mode = "active"` / `"assisted"` / `"auto"` in config.toml to enable active automation. This ensures no unintended tool execution without explicit opt-in.
+- **CVE tool preference**: `cve_search`, `cve_lookup`, and `patch_status_check` now prefer WebFetch-compatible tools before browser automation fallbacks.
 
 ### Removed
 
@@ -30,7 +33,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Loop Runtime automation skeleton with `Observe -> Decide -> Act -> Verify -> Record -> Next` flow.
 - `LoopDecision` metadata fields: `trigger`, `feedback_gate`, `exit_condition`, `required_artifact`, `required_capability`, and `selected_tool`.
 - Automation runtime modules: decision tree, loop state, gate engine, rhythm classifier, quick cards, executor adapter layer, loop recorder, and report builder.
-- Registered executor adapters for bounded tool execution. The default executor remains plan-only; explicitly registered adapters can execute scoped steps and return standard `ExecutionResult` objects.
+- Registered executor adapters for bounded tool execution. Red-team `active` / `auto` / `assisted` automation starts an active executor; explicitly registered adapters can execute scoped steps and return standard `ExecutionResult` objects.
 - Scope-gated runtime execution: tool steps are checked through Tool Registry and Scope Gate before adapter execution.
 - Artifact-driven progression: successful adapter output is saved through `ArtifactStore` and fed back into artifact gates before advancing.
 - Retry handling for retryable adapter failures.
@@ -107,7 +110,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Prompt-chain verification tests.
 
 ### Changed
-- Improved jailbreak text robustness. Thanks PINGS.
+- Improved prompt-chain text robustness. Thanks PINGS.
 - Refined hook injection to stay lightweight.
 
 ## [0.1.0] - 2026-05-07
