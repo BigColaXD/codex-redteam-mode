@@ -68,6 +68,8 @@ This project solves both: **normal mode stays normal**, and red-team mode must b
 
 ### Python (cross-platform)
 
+Requires Python 3.11+ because the installer uses the standard-library `tomllib` parser for safe `config.toml` merging.
+
 ```bash
 python scripts/install.py
 ```

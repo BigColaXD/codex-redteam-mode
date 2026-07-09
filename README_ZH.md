@@ -69,6 +69,8 @@ AI 辅助安全工作中有两个常见陷阱：
 
 ### 安装命令
 
+需要 Python 3.11+，因为安装器使用标准库 `tomllib` 安全解析并合并 `config.toml`。
+
 ```bash
 python scripts/install.py
 ```

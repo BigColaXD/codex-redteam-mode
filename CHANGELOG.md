@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added `--project-home PATH` for project-level installs. It writes Codex runtime/config files to `<project>/.codex` and, by default, skill cards to `<project>/.agents/skills`.
 - `--project-home` can be combined with `--agents-home PATH` to place skill cards in a custom agents directory while keeping project Codex config under `<project>/.codex`.
+- Documented the Python 3.11+ requirement because the installer uses the standard-library `tomllib` parser.
 
 ### Fixed
 
