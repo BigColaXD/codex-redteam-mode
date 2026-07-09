@@ -4,6 +4,21 @@ All notable changes to the Codex Red Team Opt-In Mode project.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.1] - 2026-07-09
+
+### Added
+
+- Added `--project-home PATH` for project-level installs. It writes Codex runtime/config files to `<project>/.codex` and, by default, skill cards to `<project>/.agents/skills`.
+- `--project-home` can be combined with `--agents-home PATH` to place skill cards in a custom agents directory while keeping project Codex config under `<project>/.codex`.
+- Documented the Python 3.11+ requirement because the installer uses the standard-library `tomllib` parser.
+
+### Fixed
+
+- Merged `config.toml` structurally instead of overwriting user-owned config, preserving existing MCP servers, model providers, project trust entries, automation mode, and other user settings.
+- Protected `config.toml` during upgrade cleanup by tracking it as a merged file instead of a managed disposable path.
+- Created timestamped `config.toml.YYYYMMDDHHMMSS.bak` backups before changing an existing config file. Dry-run, no-op merges, and invalid TOML do not create backups or modify files.
+- Accepted UTF-8 BOM-prefixed existing config files during merge.
+
 ## [1.0.0] - 2026-06-28
 
 ### Changed - Loop Runtime Redesign (P0-P7)
@@ -124,6 +139,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Managed incremental installer for Python and PowerShell.
 - Reference method layer and technology routing layer from three external skill repositories.
 
+[1.1.1]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.1.1
 [1.0.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.0.0
 [0.6.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.6.0
 [0.5.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.5.0
