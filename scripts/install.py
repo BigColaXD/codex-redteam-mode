@@ -87,12 +87,18 @@ def merge_config_text(template_text:str,existing_text:str)->str:
             lines.extend(new_lines)
     if not changed: return existing_text
     return '\n'.join(lines).rstrip()+'\n'
+def backup_config_file(dst:Path,dry_run:bool)->Path:
+    backup=dst.with_name(f'{dst.name}.{datetime.now().strftime("%Y%m%d%H%M%S")}.bak')
+    info(f'backup {dst} -> {backup}')
+    if not dry_run: shutil.copy2(dst,backup)
+    return backup
 def merge_config_file(src:Path,dst:Path,dry_run:bool)->None:
     info(f'merge {src} -> {dst}')
     template_text=src.read_text(encoding='utf-8-sig')
     existing_text=dst.read_text(encoding='utf-8-sig') if dst.exists() else ''
     merged=merge_config_text(template_text,existing_text)
     if merged==existing_text: return
+    if dst.exists(): backup_config_file(dst,dry_run)
     if dry_run: return
     dst.parent.mkdir(parents=True, exist_ok=True); dst.write_text(merged,encoding='utf-8')
 def copy_tree(src:Path,dst:Path,dry_run:bool)->None:

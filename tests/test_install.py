@@ -6,6 +6,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_PATH = REPO_ROOT / "scripts" / "install.py"
@@ -58,6 +60,51 @@ def test_merge_config_accepts_utf8_bom(tmp_path: Path) -> None:
     merged = tomllib.loads(target.read_text(encoding="utf-8"))
     assert merged["automation"]["mode"] == "active"
     assert merged["model_instructions_file"] == "./instruction.ctf.md"
+
+
+def test_merge_config_backs_up_existing_file_before_change(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    original = '[automation]\nmode = "active"\n'
+    target.write_text(original, encoding="utf-8")
+
+    install.merge_config_file(REPO_ROOT / "config.toml", target, dry_run=False)
+
+    backups = list(tmp_path.glob("config.toml.*.bak"))
+    assert len(backups) == 1
+    assert backups[0].read_text(encoding="utf-8") == original
+    assert tomllib.loads(target.read_text(encoding="utf-8"))["features"]["hooks"] is True
+
+
+def test_merge_config_dry_run_does_not_write_or_backup(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    original = '[automation]\nmode = "active"\n'
+    target.write_text(original, encoding="utf-8")
+
+    install.merge_config_file(REPO_ROOT / "config.toml", target, dry_run=True)
+
+    assert target.read_text(encoding="utf-8") == original
+    assert list(tmp_path.glob("config.toml.*.bak")) == []
+
+
+def test_merge_config_does_not_backup_when_unchanged(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    target.write_text((REPO_ROOT / "config.toml").read_text(encoding="utf-8"), encoding="utf-8")
+
+    install.merge_config_file(REPO_ROOT / "config.toml", target, dry_run=False)
+
+    assert list(tmp_path.glob("config.toml.*.bak")) == []
+
+
+def test_merge_config_invalid_existing_toml_does_not_backup_or_write(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    original = "[automation\nmode = \"active\"\n"
+    target.write_text(original, encoding="utf-8")
+
+    with pytest.raises(tomllib.TOMLDecodeError):
+        install.merge_config_file(REPO_ROOT / "config.toml", target, dry_run=False)
+
+    assert target.read_text(encoding="utf-8") == original
+    assert list(tmp_path.glob("config.toml.*.bak")) == []
 
 
 def test_upgrade_cleanup_preserves_config_from_previous_manifest(tmp_path: Path) -> None:
