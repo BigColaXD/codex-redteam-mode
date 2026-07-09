@@ -2,7 +2,7 @@
 
 [English](./README.md)
 
-**当前版本：** v1.1.0
+**当前版本：** v1.1.1
 
 > 默认 normal 模式。红队模式必须显式开启；一旦进入红队模式，自动化能力默认自动启动。
 
@@ -77,8 +77,9 @@ python scripts/install.py
 
 | 参数 | 说明 |
 |------|------|
-| `--codex-home PATH` | 自定义 Codex 主目录（默认：`~/.codex`） |
-| `--agents-home PATH` | 自定义 agents 目录（默认：`~/.agents`） |
+| `--project-home PATH` | 项目级安装根目录。Codex 文件写入 `PATH/.codex`，skills 默认写入 `PATH/.agents/skills` |
+| `--agents-home PATH` | 自定义 skills 所在的 agents 目录（默认：`~/.agents`，使用 `--project-home` 时默认：`PATH/.agents`） |
+| `--codex-home PATH` | 兼容旧脚本的自定义 Codex 主目录（默认：`~/.codex`），不要和 `--project-home` 混用 |
 | `--dry-run` | 预览模式，打印所有操作但不实际写入 |
 | `--uninstall` | 卸载，移除所有托管文件、hooks 和 AGENTS.md 块 |
 
@@ -89,6 +90,12 @@ python scripts/install.py --dry-run
 # 安装到自定义位置
 python scripts/install.py --codex-home /opt/codex/home
 
+# 项目级安装
+python scripts/install.py --project-home /path/to/project
+
+# 项目级安装，并把 skills 放到共享 agents 目录
+python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents
+
 # 完整卸载
 python scripts/install.py --uninstall
 ```
@@ -96,10 +103,10 @@ python scripts/install.py --uninstall
 ### 安装器做了什么
 
 1. **升级清理** — 读取上次安装的 manifest（`~/.codex/redteam-install-manifest.json`），移除所有旧版本托管路径，外加已知历史残留（`legacy-redteam-hook.py`、`red-team-command-doctrine-old`）
-2. **核心文件** — 复制 `instruction.ctf.md` 和 `config.toml` 到 `~/.codex/`
+2. **核心文件** — 复制 `instruction.ctf.md`，并将 `config.toml` 合并到选定的 Codex 主目录（`~/.codex/` 或 `<project>/.codex/`）
 3. **Hooks** — 部署 `session-start-context.py`、`hook-security-context-hook.py`、`redteam_state.py`、`core/` 到 `~/.codex/hooks/`
 4. **子系统** — 部署 `router/`、`orchestrator/`、`automation/`、`session_patcher/` 到 `~/.codex/`
-5. **技能包** — 部署全部 34 个 SKILL.md 领域卡从 `agents/skills/` 到 `~/.agents/skills/`（每个 skill 目录仅复制 SKILL.md）
+5. **技能包** — 部署全部 35 个 SKILL.md 领域卡从 `agents/skills/` 到选定的 agents 目录（每个 skill 目录仅复制 SKILL.md）
 6. **Seed prompts** — 复制 prompt 文件到 `~/.codex/prompts/`（已有文件跳过不覆盖）
 7. **合并 hooks.json** — 清除旧的托管 hooks，注入当前版本的 `SessionStart` 和 `UserPromptSubmit` hooks（保留用户自定义 hooks）
 8. **合并 AGENTS.md** — 在 `~/.codex/AGENTS.md` 中注入或更新托管块（`<!-- codex-redteam-optin-mode:start -->`），块外用户内容不受影响
@@ -112,8 +119,9 @@ python scripts/install.py --uninstall
 
 每次运行时，先读取旧版本 manifest，仅移除本项目托管的旧安装文件，再从当前版本重新部署。这意味着：
 - 版本升级干净，同时不触碰用户自己的文件
+- `config.toml` 使用合并而不是覆盖；已有用户配置会保留，实际修改已有配置前会创建 `config.toml.YYYYMMDDHHMMSS.bak` 备份
 - `copy_tree` 整目录替换托管目录（`router/`、`orchestrator/` 等），skill 目录仅复制 `SKILL.md`
-- `AGENTS.md` 和 `hooks.json` 从不直接删除——使用托管块合并逻辑，用户自定义内容不受影响
+- `AGENTS.md`、`hooks.json` 和 `config.toml` 不会被升级清理删除——使用合并逻辑，用户自定义内容不受影响
 - 不会把 Python 缓存文件（`__pycache__`、`.pyc`、`.pyo`）复制到安装后的运行时目录
 - 如果 manifest 丢失，安装器回退到清理当前目标集合 + 已知历史残留路径
 
@@ -224,7 +232,7 @@ python scripts/validate.py
 - 安装器完整性检查
 - 所有 phase/pack 组合的路由正确性
 - 模式切换（normal ↔ light ↔ full ↔ off）
-- SKILL.md 领域卡加载及全部 34 个 skill 的 Exit Evidence 验证
+- SKILL.md 领域卡加载及全部 35 个 skill 的 Exit Evidence 验证
 - 5-Phase 引擎：controller、verify engine、loop engine、taskbook
 - Loop runtime 检查：decision tree、scope gate、adapter 执行、retry、artifact 保存、report gate
 - 编排 gate 检查（scope、report、artifact）

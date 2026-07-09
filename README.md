@@ -2,7 +2,7 @@
 
 [中文说明](./README_ZH.md)
 
-**Current release:** v1.1.0
+**Current release:** v1.1.1
 
 > Normal by default. Red-team mode is opt-in; once enabled, automation starts automatically by default.
 
@@ -76,8 +76,9 @@ python scripts/install.py
 
 | Option | Description |
 |--------|-------------|
-| `--codex-home PATH` | Custom Codex home directory (default: `~/.codex`) |
-| `--agents-home PATH` | Custom agents directory (default: `~/.agents`) |
+| `--project-home PATH` | Project-level install root. Writes Codex files to `PATH/.codex` and skills to `PATH/.agents/skills` unless `--agents-home` is set |
+| `--agents-home PATH` | Custom agents directory for skill cards (default: `~/.agents`, or `PATH/.agents` with `--project-home`) |
+| `--codex-home PATH` | Compatibility option for a custom Codex home directory (default: `~/.codex`). Do not combine with `--project-home` |
 | `--dry-run` | Preview all operations without writing any files |
 | `--uninstall` | Remove all managed files, hooks, and AGENTS.md blocks |
 
@@ -88,6 +89,12 @@ python scripts/install.py --dry-run
 # Custom install location
 python scripts/install.py --codex-home /opt/codex/home
 
+# Project-level install
+python scripts/install.py --project-home /path/to/project
+
+# Project-level install with shared skills directory
+python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents
+
 # Full uninstall
 python scripts/install.py --uninstall
 ```
@@ -95,10 +102,10 @@ python scripts/install.py --uninstall
 ### What the Installer Does
 
 1. **Upgrade cleanup** — reads the manifest from the previous install (`~/.codex/redteam-install-manifest.json`), removes all old tracked paths, plus known legacy remnants (`legacy-redteam-hook.py`, `red-team-command-doctrine-old`)
-2. **Core files** — copies `instruction.ctf.md` and `config.toml` to `~/.codex/`
+2. **Core files** — copies `instruction.ctf.md` and merges `config.toml` into the selected Codex home (`~/.codex/` or `<project>/.codex/`)
 3. **Hooks** — deploys `session-start-context.py`, `hook-security-context-hook.py`, `redteam_state.py`, and `core/` to `~/.codex/hooks/`
 4. **Subsystems** — deploys `router/`, `orchestrator/`, `automation/`, and `session_patcher/` to `~/.codex/`
-5. **Skill packs** — deploys all 34 SKILL.md domain cards from `agents/skills/` to `~/.agents/skills/` (only `SKILL.md` is copied per skill directory)
+5. **Skill packs** — deploys all 35 SKILL.md domain cards from `agents/skills/` to the selected agents home (only `SKILL.md` is copied per skill directory)
 6. **Seed prompts** — copies prompt files to `~/.codex/prompts/` (skips existing)
 7. **Merge hooks.json** — strips old managed hooks, then injects the current `SessionStart` and `UserPromptSubmit` hooks (preserves user-defined hooks)
 8. **Merge AGENTS.md** — injects or updates a managed block (`<!-- codex-redteam-optin-mode:start -->`) into `~/.codex/AGENTS.md` (preserves user content outside the block)
@@ -111,8 +118,9 @@ The installer is **idempotent** — running it repeatedly is safe and will not d
 
 On each run, it reads the previous manifest, removes only project-managed files from the old install, then re-deploys from the current version. This means:
 - Version upgrades are clean without touching user-owned files
+- `config.toml` is merged instead of overwritten; existing user settings are preserved, and changed existing configs are backed up as `config.toml.YYYYMMDDHHMMSS.bak`
 - `copy_tree` replaces managed directories (`router/`, `orchestrator/`, etc.) wholesale; skill directories copy only `SKILL.md`
-- `AGENTS.md` and `hooks.json` are never deleted — they use managed-block merge logic so user customizations survive
+- `AGENTS.md`, `hooks.json`, and `config.toml` are never deleted by upgrade cleanup — they use merge logic so user customizations survive
 - Python cache files (`__pycache__`, `.pyc`, `.pyo`) are not copied into the installed runtime
 - If the manifest is missing, the installer falls back to cleaning the current target set plus known legacy paths
 

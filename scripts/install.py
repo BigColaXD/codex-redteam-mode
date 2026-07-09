@@ -2,7 +2,7 @@ from __future__ import annotations
 import argparse, copy, json, os, platform, re, shutil, subprocess, sys, tomllib
 from datetime import datetime
 from pathlib import Path
-APP_NAME='codex-redteam-optin-mode'; APP_VERSION='1.0.0'
+APP_NAME='codex-redteam-optin-mode'; APP_VERSION='1.1.1'
 AGENTS_BLOCK_START='<!-- codex-redteam-optin-mode:start -->'; AGENTS_BLOCK_END='<!-- codex-redteam-optin-mode:end -->'
 SESSION_STATUS='Loading session mode context'; PROMPT_STATUS='Checking mode-gated offensive routing'
 def color(text:str,code:str)->str: return text if os.environ.get('NO_COLOR') else f'\033[{code}m{text}\033[0m'
