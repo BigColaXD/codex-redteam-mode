@@ -2,7 +2,7 @@
 
 [中文说明](./README_ZH.md)
 
-**Current release:** v1.1.4
+**Current release:** v1.1.5
 
 > Normal by default. Red-team mode is opt-in; once enabled, automation starts automatically by default.
 
@@ -83,10 +83,10 @@ python scripts/install.py
 | Option | Description |
 |--------|-------------|
 | `--project-home PATH` | Project-level install root. Writes Codex files to `PATH/.codex`, skills to `PATH/.agents/skills` unless `--agents-home` is set, and project guidance to `PATH/AGENTS.md` |
-| `--agents-home PATH` | Custom agents directory for skill cards (default: `~/.agents`, or `PATH/.agents` with `--project-home`) |
+| `--agents-home PATH` | Skill installation destination (default: `~/.agents`, or `PATH/.agents` with `--project-home`). For a custom runtime directory, also use `--enable-custom-skill-dirs` |
 | `--codex-home PATH` | Custom Codex Home/profile directory (default: `~/.codex`). Writes `PATH/AGENTS.md` as global guidance; use `--project-home` for project guidance. Do not combine with `--project-home` |
 | `--log-root PATH` | Custom automation log root recorded in the install manifest |
-| `--enable-custom-skill-dirs` | Allow runtime skill-card lookup to use manifest-recorded custom skill directories directly |
+| `--enable-custom-skill-dirs` | Prioritize the manifest-recorded custom skill directory at runtime |
 | `--dry-run` | Preview all operations without writing any files |
 | `--uninstall` | Remove all managed files, hooks, and AGENTS.md blocks |
 
@@ -101,21 +101,26 @@ python scripts/install.py --codex-home /opt/codex/home
 python scripts/install.py --project-home /path/to/project
 
 # Project-level install with shared skills directory
-python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents
+python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents --enable-custom-skill-dirs
 
 # Project-level install with custom runtime log root
 python scripts/install.py --project-home /path/to/project --log-root /path/to/logs
 
 # Full uninstall
 python scripts/install.py --uninstall
+
+# Uninstall a project install that used a shared skills directory
+python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents --uninstall
 ```
 
 Use `--project-home /path/to/project` for project-level installs. Do not use `--codex-home /path/to/project/.codex` as a substitute: that installs into a Codex Home/profile, so `AGENTS.md` is treated as global guidance for that profile rather than as project-root guidance.
 
+`--agents-home` controls where skill cards are installed. When it points to a custom shared directory, add `--enable-custom-skill-dirs` to make the runtime prioritize that directory. Repeat the original `--project-home`, `--codex-home`, and `--agents-home` scope when upgrading or uninstalling; cleanup stops before changing files if existing managed paths fall outside the current scope.
+
 ### What the Installer Does
 
 1. **Configuration preflight** — parses and plans both `config.toml` and `hooks.json` merges before copying or cleaning any files, so invalid existing configuration leaves the install untouched
-2. **Upgrade cleanup** — reads the manifest from the selected Codex Home (`<codex-home>/redteam-install-manifest.json`), removes all old tracked paths, plus known legacy remnants (`legacy-redteam-hook.py`, `red-team-command-doctrine-old`)
+2. **Upgrade cleanup** — reads the manifest from the selected Codex Home (`<codex-home>/redteam-install-manifest.json`), preflights every existing managed path against the current cleanup scope, then removes old tracked paths plus known legacy remnants (`legacy-redteam-hook.py`, `red-team-command-doctrine-old`)
 3. **Core files** — copies `instruction.ctf.md` and merges `config.toml` into the selected Codex Home (`~/.codex/`, custom `--codex-home`, or `<project>/.codex/`)
 4. **Hooks** — deploys `session-start-context.py`, `hook-security-context-hook.py`, `redteam_state.py`, and `core/` to the selected Codex Home's `hooks/`
 5. **Subsystems** — deploys `router/`, `orchestrator/`, `automation/`, and `session_patcher/` to the selected Codex Home
@@ -124,7 +129,7 @@ Use `--project-home /path/to/project` for project-level installs. Do not use `--
 8. **Merge hooks.json** — strips old managed hooks, then injects the current `SessionStart` and `UserPromptSubmit` hooks (preserves user-defined hooks)
 9. **Merge AGENTS.md** — injects or updates a managed block (`<!-- codex-redteam-optin-mode:start -->`) into the selected Codex Home's `AGENTS.md` as global guidance, or `<project>/AGENTS.md` with `--project-home` as project guidance (preserves user content outside the block)
 10. **Write manifest** — records managed paths, merged files, skill-card paths, custom skill-dir mode, and automation log root to `redteam-install-manifest.json`
-11. **Validate** — runs `scripts/validate.py` to verify every subsystem file is in place
+11. **Validate** — runs `scripts/validate.py` to parse the installed configuration, verify every subsystem file, and report both installed and runtime-selected skill roots
 
 ### Upgrade & Idempotency
 
@@ -134,7 +139,9 @@ On each run, it reads the previous manifest, removes only project-managed files 
 - Version upgrades are clean without touching user-owned files
 - `config.toml` is merged instead of overwritten; existing user settings are preserved, and changed existing configs are backed up as `config.toml.YYYYMMDDHHMMSS.bak`
 - `config.toml` merging uses `tomlkit` so array tables such as `[[skills.config]]` do not receive keys meant for `[automation]`
-- Invalid existing `config.toml` or `hooks.json` fails during preflight before files are copied or previous manifest paths are cleaned; UTF-8 BOM-prefixed hooks are accepted
+- Invalid existing `config.toml` or `hooks.json` fails during preflight before files are copied or previous manifest paths are cleaned; UTF-8 BOM-prefixed config and hooks files are accepted by both validation and runtime loading
+- Upgrade and uninstall cleanup abort before changing files when an existing managed path is outside the current scope; the manifest is preserved so the operation can be retried with the original path arguments
+- Custom `--agents-home` installs warn when runtime priority is not enabled, and validation reports when the runtime-selected skill root differs from the installed root
 - Relative install arguments are resolved against the install command's working directory, and generated hooks and manifest fields use absolute paths
 - `copy_tree` replaces managed directories (`router/`, `orchestrator/`, etc.) wholesale; skill directories copy only `SKILL.md`
 - `AGENTS.md`, `hooks.json`, and `config.toml` are never deleted by upgrade cleanup — they use merge logic so user customizations survive

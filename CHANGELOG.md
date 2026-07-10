@@ -4,7 +4,7 @@ All notable changes to the Codex Red Team Opt-In Mode project.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [1.1.4] - 2026-07-10
+## [1.1.5] - 2026-07-11
 
 ### Fixed
 
@@ -13,12 +13,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Installer paths are normalized to absolute paths before hook rendering, manifest writes, runtime lookup, or cleanup.
 - Existing `hooks.json` files are BOM-tolerant and fully validated before install or uninstall changes begin, preventing partial operations on invalid hook configuration.
 - Session backstop lookup now searches the transcript's complete session root, so the previous session can be found across date directories without crossing Codex profiles.
+- Runtime and validation now accept UTF-8 BOM-prefixed `config.toml` files, preventing valid automation settings from silently falling back to `plan-only`.
+- Upgrade and uninstall now preflight all existing managed paths against the current cleanup scope before changing files. Out-of-scope paths preserve the manifest and return a non-zero exit so the operation can be retried with the original `--agents-home`.
+- Custom `--agents-home` installs now warn when `--enable-custom-skill-dirs` is missing, and validation reports both the installed and runtime-selected skill roots.
 
 ### Changed
 
 - Clarified `--codex-home` as a Codex Home/profile-level install whose `AGENTS.md` is global guidance, while `--project-home` writes project-level `AGENTS.md`.
 - Documented manifest lookup and upgrade cleanup as relative to the selected Codex Home instead of hard-coding `~/.codex`.
 - Relative install arguments are resolved against the install command's working directory and stored as absolute paths.
+- Installation examples now pair shared skill directories with `--enable-custom-skill-dirs` and show the matching uninstall scope.
 
 ## [1.0.0] - 2026-06-28
 
@@ -140,7 +144,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Managed incremental installer for Python and PowerShell.
 - Reference method layer and technology routing layer from three external skill repositories.
 
-[1.1.4]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.1.4
+[1.1.5]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.1.5
 [1.0.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.0.0
 [0.6.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.6.0
 [0.5.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.5.0

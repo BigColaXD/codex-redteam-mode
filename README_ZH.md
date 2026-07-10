@@ -2,7 +2,7 @@
 
 [English](./README.md)
 
-**当前版本：** v1.1.4
+**当前版本：** v1.1.5
 
 > 默认 normal 模式。红队模式必须显式开启；一旦进入红队模式，自动化能力默认自动启动。
 
@@ -84,10 +84,10 @@ python scripts/install.py
 | 参数 | 说明 |
 |------|------|
 | `--project-home PATH` | 项目级安装根目录。Codex 文件写入 `PATH/.codex`，skills 默认写入 `PATH/.agents/skills`，项目级指导写入 `PATH/AGENTS.md` |
-| `--agents-home PATH` | 自定义 skills 所在的 agents 目录（默认：`~/.agents`，使用 `--project-home` 时默认：`PATH/.agents`） |
+| `--agents-home PATH` | skill 安装目标目录（默认：`~/.agents`，使用 `--project-home` 时默认：`PATH/.agents`）。自定义运行时目录还需同时使用 `--enable-custom-skill-dirs` |
 | `--codex-home PATH` | 自定义 Codex Home/profile 目录（默认：`~/.codex`）。`PATH/AGENTS.md` 会作为该 Codex Home 的全局 guidance；项目级 guidance 请使用 `--project-home`。不要和 `--project-home` 混用 |
 | `--log-root PATH` | 自定义自动化日志根目录，并写入安装 manifest |
-| `--enable-custom-skill-dirs` | 允许运行时直接读取 manifest 中记录的自定义 skill 目录 |
+| `--enable-custom-skill-dirs` | 让运行时优先使用 manifest 中记录的自定义 skill 目录 |
 | `--dry-run` | 预览模式，打印所有操作但不实际写入 |
 | `--uninstall` | 卸载，移除所有托管文件、hooks 和 AGENTS.md 块 |
 
@@ -102,21 +102,26 @@ python scripts/install.py --codex-home /opt/codex/home
 python scripts/install.py --project-home /path/to/project
 
 # 项目级安装，并把 skills 放到共享 agents 目录
-python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents
+python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents --enable-custom-skill-dirs
 
 # 项目级安装，自定义运行时日志目录
 python scripts/install.py --project-home /path/to/project --log-root /path/to/logs
 
 # 完整卸载
 python scripts/install.py --uninstall
+
+# 卸载使用了共享 skills 目录的项目级安装
+python scripts/install.py --project-home /path/to/project --agents-home /path/to/agents --uninstall
 ```
 
 项目级安装请使用 `--project-home /path/to/project`。不要用 `--codex-home /path/to/project/.codex` 代替它：这样会安装成 Codex Home/profile，`AGENTS.md` 会被 Codex 视为该 profile 的全局 guidance，而不是项目根目录 guidance。
 
+`--agents-home` 只决定 skill 卡安装到哪里。指向自定义共享目录时，请同时添加 `--enable-custom-skill-dirs`，让运行时优先使用该目录。升级或卸载时应重复原安装使用的 `--project-home`、`--codex-home` 和 `--agents-home` 范围；如果已有托管路径超出当前范围，清理会在修改任何文件前停止。
+
 ### 安装器做了什么
 
 1. **配置预检** — 在复制或清理任何文件前，先解析并规划 `config.toml` 与 `hooks.json` 合并；已有配置非法时，安装会失败且不留下部分安装痕迹
-2. **升级清理** — 读取选定 Codex Home 中上次安装的 manifest（`<codex-home>/redteam-install-manifest.json`），移除所有旧版本托管路径，外加已知历史残留（`legacy-redteam-hook.py`、`red-team-command-doctrine-old`）
+2. **升级清理** — 读取选定 Codex Home 中上次安装的 manifest（`<codex-home>/redteam-install-manifest.json`），先检查所有仍存在的托管路径是否属于当前清理范围，再移除旧版本托管路径及已知历史残留（`legacy-redteam-hook.py`、`red-team-command-doctrine-old`）
 3. **核心文件** — 复制 `instruction.ctf.md`，并将 `config.toml` 合并到选定的 Codex Home（`~/.codex/`、自定义 `--codex-home` 或 `<project>/.codex/`）
 4. **Hooks** — 部署 `session-start-context.py`、`hook-security-context-hook.py`、`redteam_state.py`、`core/` 到选定 Codex Home 的 `hooks/`
 5. **子系统** — 部署 `router/`、`orchestrator/`、`automation/`、`session_patcher/` 到选定 Codex Home
@@ -125,7 +130,7 @@ python scripts/install.py --uninstall
 8. **合并 hooks.json** — 清除旧的托管 hooks，注入当前版本的 `SessionStart` 和 `UserPromptSubmit` hooks（保留用户自定义 hooks）
 9. **合并 AGENTS.md** — 在选定 Codex Home 的 `AGENTS.md` 中注入或更新托管块，作为全局 guidance；使用 `--project-home` 时写入 `<project>/AGENTS.md`，作为项目级 guidance（`<!-- codex-redteam-optin-mode:start -->`），块外用户内容不受影响
 10. **写 manifest** — 记录托管路径、合并文件、skill-card 路径、自定义 skill-dir 模式和自动化日志根目录
-11. **验证** — 运行 `scripts/validate.py` 逐项检查各子系统文件是否就位
+11. **验证** — 运行 `scripts/validate.py` 解析已安装配置、检查各子系统文件，并同时报告 skill 的安装目录和运行时实际选择目录
 
 ### 升级与幂等性
 
@@ -135,7 +140,9 @@ python scripts/install.py --uninstall
 - 版本升级干净，同时不触碰用户自己的文件
 - `config.toml` 使用合并而不是覆盖；已有用户配置会保留，实际修改已有配置前会创建 `config.toml.YYYYMMDDHHMMSS.bak` 备份
 - `config.toml` 合并使用 `tomlkit`，避免 `[[skills.config]]` 等数组表吞入本应属于 `[automation]` 的键
-- 已有 `config.toml` 或 `hooks.json` 非法时会在预检阶段失败，不会复制新文件，也不会清理上次安装 manifest 中记录的路径；支持带 UTF-8 BOM 的 hooks
+- 已有 `config.toml` 或 `hooks.json` 非法时会在预检阶段失败，不会复制新文件，也不会清理上次安装 manifest 中记录的路径；验证器和运行时均支持带 UTF-8 BOM 的 config 与 hooks
+- 升级或卸载时，如果仍存在的托管路径超出当前清理范围，会在修改任何文件前终止并保留 manifest，用户可使用原始路径参数重试
+- 自定义 `--agents-home` 未启用运行时优先级时安装器会给出警告；验证器会报告运行时 skill 根目录是否与安装目录一致
 - 相对安装参数以安装命令的工作目录为基准解析，生成的 hooks 和 manifest 字段均使用绝对路径
 - `copy_tree` 整目录替换托管目录（`router/`、`orchestrator/` 等），skill 目录仅复制 `SKILL.md`
 - `AGENTS.md`、`hooks.json` 和 `config.toml` 不会被升级清理删除——使用合并逻辑，用户自定义内容不受影响
