@@ -637,6 +637,109 @@ def test_project_home_install_accepts_custom_agents_home(tmp_path: Path) -> None
     assert str(custom_agents / "skills" / "redteam-cve-validation") in payload["skills_paths"]["skill_dirs"]
 
 
+def test_uninstall_external_agents_home_requires_original_scope(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    custom_agents = tmp_path / "custom-agents"
+    codex_home = project / ".codex"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--project-home",
+            str(project),
+            "--agents-home",
+            str(custom_agents),
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    manifest = codex_home / "redteam-install-manifest.json"
+    manifest_before = manifest.read_bytes()
+    managed = codex_home / "instruction.ctf.md"
+    skill = custom_agents / "skills" / "redteam-cve-validation" / "SKILL.md"
+
+    result = subprocess.run(
+        [sys.executable, str(INSTALL_PATH), "--project-home", str(project), "--uninstall"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "outside the current cleanup scope" in result.stderr
+    assert "--agents-home" in result.stderr
+    assert manifest.read_bytes() == manifest_before
+    assert managed.exists()
+    assert skill.exists()
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--project-home",
+            str(project),
+            "--agents-home",
+            str(custom_agents),
+            "--uninstall",
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+
+    assert not manifest.exists()
+    assert not managed.exists()
+    assert not skill.exists()
+
+
+def test_upgrade_external_agents_home_requires_original_scope(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    original_agents = tmp_path / "original-agents"
+    replacement_agents = tmp_path / "replacement-agents"
+    codex_home = project / ".codex"
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--project-home",
+            str(project),
+            "--agents-home",
+            str(original_agents),
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    manifest = codex_home / "redteam-install-manifest.json"
+    manifest_before = manifest.read_bytes()
+    managed = codex_home / "instruction.ctf.md"
+    old_skill = original_agents / "skills" / "redteam-cve-validation" / "SKILL.md"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--project-home",
+            str(project),
+            "--agents-home",
+            str(replacement_agents),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "upgrade cleanup blocked" in result.stderr
+    assert manifest.read_bytes() == manifest_before
+    assert managed.exists()
+    assert old_skill.exists()
+    assert not replacement_agents.exists()
+
+
 def test_install_manifest_records_custom_skill_dirs_and_log_root(tmp_path: Path) -> None:
     project = tmp_path / "project"
     custom_log = tmp_path / "custom-logs"

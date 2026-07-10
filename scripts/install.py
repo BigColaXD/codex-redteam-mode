@@ -196,6 +196,21 @@ def managed_targets(repo_root:Path,codex_home:Path,agents_home:Path)->list[Path]
     targets.extend(agents_home/'skills'/skill_dir.name for skill_dir in repo_skill_dirs(repo_root)); return targets
 def legacy_cleanup_targets(codex_home:Path,agents_home:Path)->list[Path]:
     return [codex_home/'hooks'/'legacy-redteam-hook.py', agents_home/'skills'/'red-team-command-doctrine-old']
+def _unique_cleanup_targets(targets:list[Path],protected:set[str]|None=None)->list[Path]:
+    protected=protected or set(); unique=[]; seen=set()
+    for target in targets:
+        key=str(target)
+        if key in seen or key in protected: continue
+        seen.add(key); unique.append(target)
+    return unique
+def preflight_cleanup_targets(targets:list[Path],operation:str)->None:
+    if not _SAFE_ROOTS: return
+    outside=[target for target in targets if target.exists() and not _is_within(target,*_SAFE_ROOTS)]
+    if not outside: return
+    print(f'ERROR: {operation} blocked because managed paths exist outside the current cleanup scope:',file=sys.stderr)
+    for target in outside: print(f'  {target}',file=sys.stderr)
+    print('Re-run with the original --agents-home value. No files were changed.',file=sys.stderr)
+    raise SystemExit(2)
 def load_manifest_targets(codex_home:Path)->list[Path]:
     manifest=manifest_path(codex_home)
     if not manifest.exists(): return []
@@ -221,16 +236,15 @@ def write_manifest(codex_home:Path,agents_file:Path,agents_home:Path,targets:lis
     manifest.parent.mkdir(parents=True, exist_ok=True); manifest.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
 def upgrade_cleanup(codex_home:Path,agents_home:Path,agents_file:Path,default_targets:list[Path],dry_run:bool)->None:
     manifest=manifest_path(codex_home); previous_targets=load_manifest_targets(codex_home); cleanup_targets=previous_targets or default_targets; protected={str(agents_file), str(codex_home/'AGENTS.md'), str(codex_home/'hooks.json'), str(codex_home/'config.toml')}
-    remove_path(manifest,dry_run); seen=set()
-    for target in cleanup_targets + legacy_cleanup_targets(codex_home,agents_home):
-        key=str(target)
-        if key in seen or key in protected: continue
-        seen.add(key); remove_path(target,dry_run)
+    cleanup_targets=_unique_cleanup_targets(cleanup_targets + legacy_cleanup_targets(codex_home,agents_home),protected)
+    preflight_cleanup_targets(cleanup_targets,'upgrade cleanup')
+    remove_path(manifest,dry_run)
+    for target in cleanup_targets: remove_path(target,dry_run)
 def uninstall(repo_root:Path,codex_home:Path,agents_home:Path,agents_file:Path,dry_run:bool)->None:
     hooks_plan=prepare_hooks_removal(codex_home)
-    targets=load_manifest_targets(codex_home) or managed_targets(repo_root,codex_home,agents_home)
+    targets=_unique_cleanup_targets((load_manifest_targets(codex_home) or managed_targets(repo_root,codex_home,agents_home)) + legacy_cleanup_targets(codex_home,agents_home))
+    preflight_cleanup_targets(targets,'uninstall')
     for target in targets: remove_path(target,dry_run)
-    for target in legacy_cleanup_targets(codex_home,agents_home): remove_path(target,dry_run)
     remove_agents_block(agents_file,dry_run)
     if agents_file != codex_home/'AGENTS.md': remove_agents_block(codex_home/'AGENTS.md',dry_run)
     info(f'apply managed hook removal -> {hooks_plan[0]}'); apply_hooks_plan(hooks_plan,dry_run); remove_path(manifest_path(codex_home),dry_run)
