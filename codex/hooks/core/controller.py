@@ -82,7 +82,7 @@ def _automation_mode_from_config(codex_dir: Path, redteam_mode: str) -> str:
             continue
         seen.add(key)
         try:
-            config = tomllib.loads(candidate.read_text(encoding="utf-8"))
+            config = tomllib.loads(candidate.read_text(encoding="utf-8-sig"))
         except (OSError, tomllib.TOMLDecodeError):
             continue
         features = config.get("features", {}) if isinstance(config, dict) else {}
@@ -118,7 +118,7 @@ def _mcp_inventory_paths_from_config(codex_dir: Path) -> list[Path]:
             continue
         seen.add(key)
         try:
-            config = tomllib.loads(candidate.read_text(encoding="utf-8"))
+            config = tomllib.loads(candidate.read_text(encoding="utf-8-sig"))
         except (OSError, tomllib.TOMLDecodeError):
             continue
         if not isinstance(config, dict):

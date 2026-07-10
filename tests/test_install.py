@@ -14,6 +14,7 @@ from tomlkit.exceptions import ParseError as TomlParseError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_PATH = REPO_ROOT / "scripts" / "install.py"
+VALIDATE_PATH = REPO_ROOT / "scripts" / "validate.py"
 CODEX_PATH = REPO_ROOT / "codex"
 HOOKS_PATH = REPO_ROOT / "codex" / "hooks"
 
@@ -23,11 +24,17 @@ sys.modules[spec.name] = install
 assert spec.loader is not None
 spec.loader.exec_module(install)
 
+validate_spec = importlib.util.spec_from_file_location("validate_script", VALIDATE_PATH)
+validate = importlib.util.module_from_spec(validate_spec)
+sys.modules[validate_spec.name] = validate
+assert validate_spec.loader is not None
+validate_spec.loader.exec_module(validate)
+
 if str(HOOKS_PATH) not in sys.path:
     sys.path.insert(0, str(HOOKS_PATH))
 if str(CODEX_PATH) not in sys.path:
     sys.path.insert(0, str(CODEX_PATH))
-from core import prompt_parser, refusal_backstop, runtime_paths, skill_card
+from core import controller, prompt_parser, refusal_backstop, runtime_paths, skill_card
 from session_patcher import patcher
 
 
@@ -130,6 +137,44 @@ def test_merge_config_accepts_utf8_bom(tmp_path: Path) -> None:
     merged = tomllib.loads(target.read_text(encoding="utf-8"))
     assert merged["automation"]["mode"] == "active"
     assert merged["model_instructions_file"] == "./instruction.ctf.md"
+
+
+def test_runtime_accepts_unchanged_utf8_bom_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    codex_home = tmp_path / ".codex"
+    target = codex_home / "config.toml"
+    target.parent.mkdir(parents=True)
+    original = b"\xef\xbb\xbf" + (REPO_ROOT / "config.toml").read_bytes()
+    target.write_bytes(original)
+
+    install.merge_config_file(REPO_ROOT / "config.toml", target, dry_run=False)
+
+    assert target.read_bytes() == original
+    monkeypatch.setattr(controller.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    monkeypatch.delenv("CODEX_REDTEAM_AUTOMATION_MODE", raising=False)
+    monkeypatch.delenv("CODEX_REDTEAM_CONFIG", raising=False)
+    assert controller._automation_mode_from_config(codex_home, "redteam-light") == "active"
+
+
+def test_validate_config_accepts_utf8_bom(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    target.write_bytes(b"\xef\xbb\xbf" + (REPO_ROOT / "config.toml").read_bytes())
+
+    _, messages = validate.validate_install(tmp_path)
+
+    assert "config.toml: valid" in messages
+
+
+def test_validate_config_rejects_invalid_toml(tmp_path: Path) -> None:
+    target = tmp_path / "config.toml"
+    target.write_text("[automation\n", encoding="utf-8")
+
+    all_ok, messages = validate.validate_install(tmp_path)
+
+    assert all_ok is False
+    assert any(message.startswith("config.toml: INVALID TOML") for message in messages)
 
 
 def test_merge_config_backs_up_existing_file_before_change(tmp_path: Path) -> None:

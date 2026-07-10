@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tomllib
 from pathlib import Path
 from typing import List, Tuple
 
@@ -243,7 +244,12 @@ def validate_install(codex_home: Path) -> Tuple[bool, List[str]]:
 
     config_path = repo_root / "config.toml"
     if config_path.exists():
-        messages.append("config.toml: present")
+        try:
+            tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
+            messages.append("config.toml: valid")
+        except (OSError, tomllib.TOMLDecodeError) as e:
+            messages.append(f"config.toml: INVALID TOML - {e}")
+            all_ok = False
     else:
         messages.append("config.toml: MISSING")
         all_ok = False
