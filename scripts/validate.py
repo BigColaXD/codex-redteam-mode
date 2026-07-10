@@ -174,6 +174,20 @@ def _resolve_skills_dir(repo_root: Path, source_tree_mode: bool) -> Path | None:
     return None
 
 
+def _resolve_runtime_skills_dir(codex_root: Path, source_tree_mode: bool) -> Path | None:
+    if source_tree_mode:
+        return None
+    hooks_dir = codex_root / "hooks"
+    hooks_dir_str = str(hooks_dir)
+    if hooks_dir_str not in sys.path:
+        sys.path.insert(0, hooks_dir_str)
+    try:
+        from core.skill_card import resolve_skills_dir
+    except ImportError:
+        return None
+    return resolve_skills_dir(codex_root)
+
+
 def validate_install(codex_home: Path) -> Tuple[bool, List[str]]:
     messages: List[str] = []
     all_ok = True
@@ -257,7 +271,15 @@ def validate_install(codex_home: Path) -> Tuple[bool, List[str]]:
     skills_dir = _resolve_skills_dir(repo_root, source_tree_mode)
     if skills_dir is not None:
         messages.append("")
-        messages.append(f"Skill runtime cards: {skills_dir}")
+        messages.append(f"Installed skill cards: {skills_dir}")
+        runtime_skills_dir = _resolve_runtime_skills_dir(codex_root, source_tree_mode)
+        if runtime_skills_dir is not None:
+            messages.append(f"Runtime skill cards: {runtime_skills_dir}")
+            if runtime_skills_dir.resolve(strict=False) != skills_dir.resolve(strict=False):
+                messages.append(
+                    "  WARN runtime is not using the installed skill root; "
+                    "reinstall with --enable-custom-skill-dirs to prioritize it"
+                )
         for skill_id in REQUIRED_SKILL_IDS:
             skill_md = skills_dir / skill_id / "SKILL.md"
             if skill_md.exists():

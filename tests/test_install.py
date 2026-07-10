@@ -637,6 +637,85 @@ def test_project_home_install_accepts_custom_agents_home(tmp_path: Path) -> None
     assert str(custom_agents / "skills" / "redteam-cve-validation") in payload["skills_paths"]["skill_dirs"]
 
 
+def test_custom_agents_home_without_runtime_opt_in_warns(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    custom_agents = tmp_path / "custom-agents"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--project-home",
+            str(project),
+            "--agents-home",
+            str(custom_agents),
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "[WARN] custom --agents-home" in result.stdout
+    assert "--enable-custom-skill-dirs" in result.stdout
+
+
+def test_custom_agents_home_with_runtime_opt_in_does_not_warn(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    custom_agents = tmp_path / "custom-agents"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--project-home",
+            str(project),
+            "--agents-home",
+            str(custom_agents),
+            "--enable-custom-skill-dirs",
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "[WARN] custom --agents-home" not in result.stdout
+
+
+def test_validate_reports_custom_skill_runtime_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = tmp_path / "project"
+    custom_agents = tmp_path / "custom-agents"
+    fake_home = tmp_path / "home"
+    runtime_skills = fake_home / ".agents" / "skills"
+    _write_skill(runtime_skills)
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--project-home",
+            str(project),
+            "--agents-home",
+            str(custom_agents),
+        ],
+        cwd=REPO_ROOT,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    monkeypatch.setattr(skill_card.Path, "home", classmethod(lambda cls: fake_home))
+
+    all_ok, messages = validate.validate_install(project / ".codex")
+
+    assert all_ok is True
+    assert f"Installed skill cards: {custom_agents / 'skills'}" in messages
+    assert f"Runtime skill cards: {runtime_skills}" in messages
+    assert any("runtime is not using the installed skill root" in message for message in messages)
+
+
 def test_uninstall_external_agents_home_requires_original_scope(tmp_path: Path) -> None:
     project = tmp_path / "project"
     custom_agents = tmp_path / "custom-agents"

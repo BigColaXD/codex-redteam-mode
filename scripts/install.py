@@ -17,6 +17,7 @@ AGENTS_BLOCK_START='<!-- codex-redteam-optin-mode:start -->'; AGENTS_BLOCK_END='
 SESSION_STATUS='Loading session mode context'; PROMPT_STATUS='Checking mode-gated offensive routing'
 def color(text:str,code:str)->str: return text if os.environ.get('NO_COLOR') else f'\033[{code}m{text}\033[0m'
 def info(msg:str)->None: print(color(f'[INFO] {msg}','36'))
+def warn(msg:str)->None: print(color(f'[WARN] {msg}','33'))
 def good(msg:str)->None: print(color(f'[OK] {msg}','32'))
 def manifest_path(codex_home:Path)->Path: return codex_home/'redteam-install-manifest.json'
 def normalize_path(value:str|Path)->Path: return Path(value).expanduser().resolve(strict=False)
@@ -249,7 +250,7 @@ def uninstall(repo_root:Path,codex_home:Path,agents_home:Path,agents_file:Path,d
     if agents_file != codex_home/'AGENTS.md': remove_agents_block(codex_home/'AGENTS.md',dry_run)
     info(f'apply managed hook removal -> {hooks_plan[0]}'); apply_hooks_plan(hooks_plan,dry_run); remove_path(manifest_path(codex_home),dry_run)
 def main()->None:
-    parser=argparse.ArgumentParser(description='Install codex-redteam-optin-mode into a Codex Home or project.'); parser.add_argument('--codex-home', help='Codex Home/profile directory. AGENTS.md here is global guidance; use --project-home for project AGENTS.md.'); parser.add_argument('--agents-home', help='Agents directory whose skills are installed under PATH/skills.'); parser.add_argument('--project-home', help='Project root. Installs Codex files under PATH/.codex, skills under PATH/.agents by default, and AGENTS.md at PATH/AGENTS.md.'); parser.add_argument('--log-root', help='Automation log root recorded in the install manifest.'); parser.add_argument('--enable-custom-skill-dirs', action='store_true', help='Allow runtime skill lookup to use manifest-recorded custom skill directories directly.'); parser.add_argument('--dry-run', action='store_true', help='Preview operations without writing files.'); parser.add_argument('--uninstall', action='store_true', help='Remove managed files, hooks, and AGENTS.md blocks.'); args=parser.parse_args()
+    parser=argparse.ArgumentParser(description='Install codex-redteam-optin-mode into a Codex Home or project.'); parser.add_argument('--codex-home', help='Codex Home/profile directory. AGENTS.md here is global guidance; use --project-home for project AGENTS.md.'); parser.add_argument('--agents-home', help='Skill installation destination. For a custom runtime directory, also use --enable-custom-skill-dirs.'); parser.add_argument('--project-home', help='Project root. Installs Codex files under PATH/.codex, skills under PATH/.agents by default, and AGENTS.md at PATH/AGENTS.md.'); parser.add_argument('--log-root', help='Automation log root recorded in the install manifest.'); parser.add_argument('--enable-custom-skill-dirs', action='store_true', help='Prioritize the manifest-recorded custom skill directory at runtime.'); parser.add_argument('--dry-run', action='store_true', help='Preview operations without writing files.'); parser.add_argument('--uninstall', action='store_true', help='Remove managed files, hooks, and AGENTS.md blocks.'); args=parser.parse_args()
     if args.project_home and args.codex_home: parser.error('--project-home cannot be combined with --codex-home')
     repo_root=Path(__file__).resolve().parents[1]; codex_home,agents_home,agents_file=resolve_install_paths(args.project_home,args.codex_home,args.agents_home)
     log_root=resolve_log_root(codex_home,args.log_root)
@@ -258,6 +259,8 @@ def main()->None:
     info(f'platform: {platform.system()}'); info(f'codex home: {codex_home}'); info(f'agents home: {agents_home}')
     info(f'AGENTS.md: {agents_file}')
     info(f'log root: {log_root}')
+    if args.agents_home and not args.enable_custom_skill_dirs and not args.uninstall:
+        warn('custom --agents-home installs skill cards there, but runtime may prefer project or user defaults; use --enable-custom-skill-dirs to prioritize it')
     current_targets=managed_targets(repo_root,codex_home,agents_home)
     if args.uninstall: uninstall(repo_root,codex_home,agents_home,agents_file,args.dry_run); good('uninstall complete'); return
     info(f"preflight config merge {repo_root/'config.toml'} -> {codex_home/'config.toml'}")
