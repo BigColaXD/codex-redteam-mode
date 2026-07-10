@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from redteam_state import _safe_session_key, state_dir
+    from redteam_state import _safe_session_key, memory_dir
 except ModuleNotFoundError:  # package import path used by tests/automation
-    from hooks.redteam_state import _safe_session_key, state_dir
+    from hooks.redteam_state import _safe_session_key, memory_dir
 
 
 DEFAULT_SESSION_MEMORY: dict[str, Any] = {
@@ -32,7 +32,7 @@ DEFAULT_SESSION_MEMORY: dict[str, Any] = {
 
 
 def _memory_root() -> Path:
-    root = state_dir().parent / "codex_redteam_memory"
+    root = memory_dir()
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -68,10 +68,14 @@ def _load_json(path: Path, fallback: Any) -> Any:
 
 
 def load_session_memory(session_id: str) -> dict[str, Any]:
+    if not session_id.strip():
+        return deepcopy(DEFAULT_SESSION_MEMORY)
     return _deep_merge(DEFAULT_SESSION_MEMORY, _load_json(_session_path(session_id), {}))
 
 
 def save_session_memory(session_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    if not session_id.strip():
+        return _deep_merge(DEFAULT_SESSION_MEMORY, data)
     path = _session_path(session_id)
     current = load_session_memory(session_id)
     merged = _deep_merge(current, data)
@@ -80,6 +84,8 @@ def save_session_memory(session_id: str, data: dict[str, Any]) -> dict[str, Any]
 
 
 def append_long_memory(session_id: str, entry: dict[str, Any]) -> list[dict[str, Any]]:
+    if not session_id.strip():
+        return [deepcopy(entry)]
     path = _long_memory_path(session_id)
     history = _load_json(path, [])
     if not isinstance(history, list):
@@ -91,6 +97,8 @@ def append_long_memory(session_id: str, entry: dict[str, Any]) -> list[dict[str,
 
 
 def load_long_memory(session_id: str) -> list[dict[str, Any]]:
+    if not session_id.strip():
+        return []
     history = _load_json(_long_memory_path(session_id), [])
     return history if isinstance(history, list) else []
 

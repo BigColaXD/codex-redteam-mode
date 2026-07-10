@@ -35,6 +35,12 @@ def resolve_install_homes(project_home:str|None,codex_home:str|None,agents_home:
     return codex_home,agents_home
 def resolve_log_root(codex_home:Path,explicit:str|None)->Path:
     return normalize_path(explicit) if explicit else normalize_path(codex_home/'logs'/'codex-redteam')
+def runtime_state_locations()->list[Path]:
+    locations=[]; configured=os.environ.get('CODEX_HOME','').strip()
+    if configured: locations.append(normalize_path(configured)/'redteam-mode'/'state')
+    default=normalize_path(Path.home()/'.codex'/'redteam-mode'/'state')
+    if default not in locations: locations.append(default)
+    return locations
 def _is_within(path:Path,*roots:Path)->bool:
     resolved=path.resolve()
     return any(resolved == root.resolve() or str(resolved).startswith(str(root.resolve())+os.sep) for root in roots if root)
@@ -365,7 +371,11 @@ def main()->None:
     if args.agents_home and not args.enable_custom_skill_dirs and not args.uninstall:
         warn('custom --agents-home installs skill cards there, but runtime may prefer project or user defaults; use --enable-custom-skill-dirs to prioritize it')
     current_targets=managed_targets(repo_root,codex_home,agents_home)
-    if args.uninstall: uninstall(repo_root,codex_home,agents_home,agents_file,args.dry_run); good('uninstall complete'); return
+    if args.uninstall:
+        uninstall(repo_root,codex_home,agents_home,agents_file,args.dry_run)
+        info('runtime session state and memory are preserved after uninstall; possible locations:')
+        for location in runtime_state_locations(): info(f'  {location}')
+        good('uninstall complete'); return
     info(f"preflight config merge {repo_root/'config.toml'} -> {codex_home/'config.toml'}")
     previous_manifest=load_manifest_data(codex_home)
     config_plan=prepare_config_merge(repo_root/'config.toml', codex_home/'config.toml',previous_manifest.get('config_merge'))

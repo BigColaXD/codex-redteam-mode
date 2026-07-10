@@ -84,7 +84,7 @@ python scripts/install.py
 |--------|-------------|
 | `--project-home PATH` | Project-level install root. Writes Codex files to `PATH/.codex`, skills to `PATH/.agents/skills` unless `--agents-home` is set, and project guidance to `PATH/AGENTS.md` |
 | `--agents-home PATH` | Skill installation destination (default: `~/.agents`, or `PATH/.agents` with `--project-home`). For a custom runtime directory, also use `--enable-custom-skill-dirs` |
-| `--codex-home PATH` | Custom Codex Home/profile directory (default: `~/.codex`). Writes `PATH/AGENTS.md` as global guidance; use `--project-home` for project guidance. Do not combine with `--project-home` |
+| `--codex-home PATH` | Custom installation target for Codex Home/profile files (default: `~/.codex`). Writes `PATH/AGENTS.md` as global guidance; use `--project-home` for project guidance. Do not combine with `--project-home` |
 | `--log-root PATH` | Custom automation log root recorded in the install manifest |
 | `--enable-custom-skill-dirs` | Prioritize the manifest-recorded custom skill directory at runtime |
 | `--dry-run` | Preview all operations without writing any files |
@@ -116,6 +116,32 @@ python scripts/install.py --project-home /path/to/project --agents-home /path/to
 Use `--project-home /path/to/project` for project-level installs. Do not use `--codex-home /path/to/project/.codex` as a substitute: that installs into a Codex Home/profile, so `AGENTS.md` is treated as global guidance for that profile rather than as project-root guidance.
 
 `--agents-home` controls where skill cards are installed. When it points to a custom shared directory, add `--enable-custom-skill-dirs` to make the runtime prioritize that directory. Repeat the original `--project-home`, `--codex-home`, and `--agents-home` scope when upgrading or uninstalling; cleanup stops before changing files if existing managed paths fall outside the current scope.
+
+### Runtime State Location
+
+Red-team session state and memory are not stored in the install manifest or project directory. At runtime they use:
+
+```text
+$CODEX_HOME/redteam-mode/state/sessions/<session_id>.json
+$CODEX_HOME/redteam-mode/state/memory/<session_id>.json
+```
+
+When `CODEX_HOME` is unset, `$CODEX_HOME` above means `~/.codex`. The `--codex-home` installer option only selects where files are installed; for a custom install, it is recommended to launch Codex with the same environment value:
+
+```bash
+CODEX_HOME=/opt/codex/home codex
+```
+
+Running without the matching environment variable is supported, but runtime state then falls back to `~/.codex`. State files are keyed by Codex session ID, so unrelated sessions are not expected to collide.
+
+`--project-home` does not make runtime state project-local. Project installs also use the active `CODEX_HOME`, or `~/.codex` when it is unset. Different Codex config profiles under the same `CODEX_HOME` share this state root while remaining separated by session ID.
+
+Uninstall removes managed project/plugin files but intentionally keeps session state and memory. If manual cleanup is desired, remove one of these roots after confirming the active Codex Home:
+
+```text
+$CODEX_HOME/redteam-mode/state
+~/.codex/redteam-mode/state
+```
 
 ### What the Installer Does
 
@@ -185,7 +211,7 @@ Submit mode commands as a separate prompt. Enabling `redteam-light` or `redteam-
 disable red team mode
 ```
 
-Disabling the mode stops future structured routing. The base `instruction.ctf.md` profile and prior task context remain active; use `/clear` or start a new task to remove prior per-session context.
+Disabling the mode stops future structured routing and resets the current session state file to normal without deleting it. The base `instruction.ctf.md` profile and prior task context remain active; use `/clear` or start a new task to remove prior per-session context.
 
 ### Mode Reference
 

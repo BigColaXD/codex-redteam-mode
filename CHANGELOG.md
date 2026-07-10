@@ -22,6 +22,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Installer manifests now record the exact `config.toml` values and tables added by the installer. Uninstall removes only unchanged installer-owned values before deleting `instruction.ctf.md`; legacy manifests preserve the file when configuration ownership cannot be proven.
 - Resumed and compacted red-team sessions now load only stable global prompt files. Phase-specific prompts such as `Reverse.md` remain per-turn overlays and are injected only after the current prompt is routed to that phase.
 - Normal `SessionStart` no longer injects the additional prepoison or refusal backstop. Light/full activation injects the existing prepoison once, resume/compact restores it only for active red-team sessions, and disabling the mode now accurately describes the base profile and retained task history.
+- Session state now persists under `$CODEX_HOME/redteam-mode/state/sessions` (falling back to `~/.codex`) instead of `TEMP`/`TMP`; session memory uses the sibling `memory` directory, missing session IDs no longer create shared `global.json` state, and uninstall intentionally preserves these runtime files.
 
 ### Changed
 

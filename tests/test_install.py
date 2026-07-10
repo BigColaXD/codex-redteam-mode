@@ -36,8 +36,9 @@ if str(HOOKS_PATH) not in sys.path:
     sys.path.insert(0, str(HOOKS_PATH))
 if str(CODEX_PATH) not in sys.path:
     sys.path.insert(0, str(CODEX_PATH))
-from core import controller, emitter, prompt_parser, refusal_backstop, runtime_paths, skill_card, supplemental_prompts
+from core import controller, emitter, memory_store, prompt_parser, refusal_backstop, runtime_paths, skill_card, supplemental_prompts
 from session_patcher import patcher
+import redteam_state
 
 
 def _write_skill(skills_root: Path, name: str = "redteam-demo") -> Path:
@@ -117,8 +118,10 @@ def test_hook_json_is_ascii_safe_and_round_trips_unicode() -> None:
 def test_hook_stdout_is_utf8_safe_under_gbk(tmp_path: Path) -> None:
     session_id = "gbk-session"
     temp_dir = tmp_path / "temp"
+    codex_home = tmp_path / "codex-home"
     env = {
         **os.environ,
+        "CODEX_HOME": str(codex_home),
         "TEMP": str(temp_dir),
         "TMP": str(temp_dir),
         "PYTHONIOENCODING": "gbk",
@@ -170,15 +173,17 @@ def test_extract_session_start_source(payload: dict, expected: str) -> None:
 def test_session_start_preserves_mode_on_resume_and_compact(tmp_path: Path) -> None:
     session_id = "resume-session"
     temp_dir = tmp_path / "temp"
+    codex_home = tmp_path / "codex-home"
     env = {
         **os.environ,
+        "CODEX_HOME": str(codex_home),
         "TEMP": str(temp_dir),
         "TMP": str(temp_dir),
         "CODEX_REDTEAM_AUTOMATION_MODE": "plan-only",
         "NO_COLOR": "1",
     }
     transcript = tmp_path / "sessions" / "current.jsonl"
-    state_path = temp_dir / "codex_redteam_mode_states" / f"{session_id}.json"
+    state_path = codex_home / "redteam-mode" / "state" / "sessions" / f"{session_id}.json"
 
     _run_hook_script(
         SESSION_START_HOOK,
@@ -236,8 +241,10 @@ def test_session_start_preserves_mode_on_resume_and_compact(tmp_path: Path) -> N
 def test_mode_enable_injects_prepoison_once(tmp_path: Path, command: str, mode: str) -> None:
     session_id = f"enable-{mode}"
     temp_dir = tmp_path / "temp"
+    codex_home = tmp_path / "codex-home"
     env = {
         **os.environ,
+        "CODEX_HOME": str(codex_home),
         "TEMP": str(temp_dir),
         "TMP": str(temp_dir),
         "CODEX_REDTEAM_AUTOMATION_MODE": "plan-only",
@@ -250,7 +257,7 @@ def test_mode_enable_injects_prepoison_once(tmp_path: Path, command: str, mode: 
     assert f"Red-team mode enabled ({mode})" in context
     assert context.count("[prepoison:frame-lock]") == 1
     assert json.loads(
-        (temp_dir / "codex_redteam_mode_states" / f"{session_id}.json").read_text(encoding="utf-8")
+        (codex_home / "redteam-mode" / "state" / "sessions" / f"{session_id}.json").read_text(encoding="utf-8")
     )["mode"] == mode
 
     routed = _run_hook_script(
@@ -267,7 +274,14 @@ def test_mode_enable_injects_prepoison_once(tmp_path: Path, command: str, mode: 
 def test_mode_disable_describes_remaining_base_and_history_context(tmp_path: Path) -> None:
     session_id = "disable-session"
     temp_dir = tmp_path / "temp"
-    env = {**os.environ, "TEMP": str(temp_dir), "TMP": str(temp_dir), "NO_COLOR": "1"}
+    codex_home = tmp_path / "codex-home"
+    env = {
+        **os.environ,
+        "CODEX_HOME": str(codex_home),
+        "TEMP": str(temp_dir),
+        "TMP": str(temp_dir),
+        "NO_COLOR": "1",
+    }
 
     _run_hook_script(PROMPT_HOOK, {"session_id": session_id, "prompt": "/redteam light"}, env)
     disabled = _run_hook_script(PROMPT_HOOK, {"session_id": session_id, "prompt": "/redteam off"}, env)
@@ -276,13 +290,153 @@ def test_mode_disable_describes_remaining_base_and_history_context(tmp_path: Pat
     assert "Structured red-team routing disabled" in context
     assert "base instruction.ctf.md profile" in context
     assert "previous task context remain active" in context
+    assert "state file remains stored" in context
     assert "/clear" in context
+    state_path = codex_home / "redteam-mode" / "state" / "sessions" / f"{session_id}.json"
+    assert state_path.exists()
+    assert json.loads(state_path.read_text(encoding="utf-8"))["mode"] == "normal"
     after_disable = _run_hook_script(
         PROMPT_HOOK,
         {"session_id": session_id, "prompt": "Review authentication bypass risk"},
         env,
     )
     assert after_disable.stdout == ""
+
+
+def test_state_paths_use_codex_home_and_ignore_temp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    codex_home = tmp_path / "codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("TEMP", str(tmp_path / "temp-a"))
+    monkeypatch.setenv("TMP", str(tmp_path / "temp-a"))
+
+    assert redteam_state.state_root() == codex_home / "redteam-mode" / "state"
+    assert redteam_state.state_dir() == codex_home / "redteam-mode" / "state" / "sessions"
+    assert redteam_state.memory_dir() == codex_home / "redteam-mode" / "state" / "memory"
+
+    redteam_state.save_state(redteam_state.RedTeamState(mode="redteam-light"), session_id="stable-session")
+    monkeypatch.setenv("TEMP", str(tmp_path / "temp-b"))
+    monkeypatch.setenv("TMP", str(tmp_path / "temp-b"))
+
+    assert redteam_state.load_state("stable-session").mode == "redteam-light"
+
+
+def test_resume_hook_uses_codex_home_when_temp_changes(tmp_path: Path) -> None:
+    session_id = "temp-change-session"
+    codex_home = tmp_path / "codex-home"
+    transcript = tmp_path / "sessions" / "current.jsonl"
+    env_a = {
+        **os.environ,
+        "CODEX_HOME": str(codex_home),
+        "TEMP": str(tmp_path / "temp-a"),
+        "TMP": str(tmp_path / "temp-a"),
+        "NO_COLOR": "1",
+    }
+    env_b = {
+        **env_a,
+        "TEMP": str(tmp_path / "temp-b"),
+        "TMP": str(tmp_path / "temp-b"),
+    }
+
+    _run_hook_script(
+        SESSION_START_HOOK,
+        {"session_id": session_id, "transcript_path": str(transcript), "source": "startup"},
+        env_a,
+    )
+    _run_hook_script(PROMPT_HOOK, {"session_id": session_id, "prompt": "/redteam light"}, env_a)
+    resumed = _run_hook_script(
+        SESSION_START_HOOK,
+        {"session_id": session_id, "transcript_path": str(transcript), "source": "resume"},
+        env_b,
+    )
+    context = json.loads(resumed.stdout)["hookSpecificOutput"]["additionalContext"]
+
+    assert "Session mode restored (redteam-light)" in context
+    assert (
+        codex_home / "redteam-mode" / "state" / "sessions" / f"{session_id}.json"
+    ).exists()
+
+
+def test_state_paths_fall_back_to_user_codex_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_home = tmp_path / "home"
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(redteam_state.Path, "home", classmethod(lambda cls: fake_home))
+
+    assert redteam_state.state_dir() == fake_home / ".codex" / "redteam-mode" / "state" / "sessions"
+
+
+def test_missing_session_id_does_not_create_global_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    codex_home = tmp_path / "codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    redteam_state.save_state(redteam_state.default_state())
+    assert not redteam_state.state_dir().exists()
+    with pytest.raises(ValueError):
+        redteam_state.state_path(None)
+
+    env = {**os.environ, "CODEX_HOME": str(codex_home), "NO_COLOR": "1"}
+    submitted = _run_hook_script(PROMPT_HOOK, {"prompt": "/redteam light"}, env)
+    assert submitted.stdout == ""
+    assert not redteam_state.state_dir().exists()
+
+
+def test_memory_paths_follow_codex_state_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    codex_home = tmp_path / "codex-home"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    memory_store.save_session_memory("memory-session", {"facts_confirmed": ["fact"]})
+    memory_store.append_long_memory("memory-session", {"summary": "entry"})
+
+    memory_root = codex_home / "redteam-mode" / "state" / "memory"
+    assert (memory_root / "memory-session.json").exists()
+    assert (memory_root / "memory-session.long.json").exists()
+    assert memory_store.load_session_memory("")["facts_confirmed"] == []
+    assert not (memory_root / "global.json").exists()
+
+
+def test_uninstall_preserves_runtime_state_files(tmp_path: Path) -> None:
+    codex_home = tmp_path / "codex-home"
+    agents_home = tmp_path / "agents-home"
+    env = {**os.environ, "CODEX_HOME": str(codex_home), "NO_COLOR": "1"}
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--codex-home",
+            str(codex_home),
+            "--agents-home",
+            str(agents_home),
+            "--enable-custom-skill-dirs",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    state_file = codex_home / "redteam-mode" / "state" / "sessions" / "preserved.json"
+    state_file.parent.mkdir(parents=True)
+    state_file.write_text('{"mode":"normal"}\n', encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(INSTALL_PATH),
+            "--codex-home",
+            str(codex_home),
+            "--agents-home",
+            str(agents_home),
+            "--uninstall",
+        ],
+        cwd=REPO_ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert state_file.exists()
+    assert "runtime session state and memory are preserved" in result.stdout
+    assert str(codex_home / "redteam-mode" / "state") in result.stdout
 
 
 def test_normal_session_start_does_not_run_explicit_refusal_backstop(

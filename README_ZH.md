@@ -85,7 +85,7 @@ python scripts/install.py
 |------|------|
 | `--project-home PATH` | 项目级安装根目录。Codex 文件写入 `PATH/.codex`，skills 默认写入 `PATH/.agents/skills`，项目级指导写入 `PATH/AGENTS.md` |
 | `--agents-home PATH` | skill 安装目标目录（默认：`~/.agents`，使用 `--project-home` 时默认：`PATH/.agents`）。自定义运行时目录还需同时使用 `--enable-custom-skill-dirs` |
-| `--codex-home PATH` | 自定义 Codex Home/profile 目录（默认：`~/.codex`）。`PATH/AGENTS.md` 会作为该 Codex Home 的全局 guidance；项目级 guidance 请使用 `--project-home`。不要和 `--project-home` 混用 |
+| `--codex-home PATH` | 自定义 Codex Home/profile 文件的安装目标（默认：`~/.codex`）。`PATH/AGENTS.md` 会作为该 Codex Home 的全局 guidance；项目级 guidance 请使用 `--project-home`。不要和 `--project-home` 混用 |
 | `--log-root PATH` | 自定义自动化日志根目录，并写入安装 manifest |
 | `--enable-custom-skill-dirs` | 让运行时优先使用 manifest 中记录的自定义 skill 目录 |
 | `--dry-run` | 预览模式，打印所有操作但不实际写入 |
@@ -117,6 +117,32 @@ python scripts/install.py --project-home /path/to/project --agents-home /path/to
 项目级安装请使用 `--project-home /path/to/project`。不要用 `--codex-home /path/to/project/.codex` 代替它：这样会安装成 Codex Home/profile，`AGENTS.md` 会被 Codex 视为该 profile 的全局 guidance，而不是项目根目录 guidance。
 
 `--agents-home` 只决定 skill 卡安装到哪里。指向自定义共享目录时，请同时添加 `--enable-custom-skill-dirs`，让运行时优先使用该目录。升级或卸载时应重复原安装使用的 `--project-home`、`--codex-home` 和 `--agents-home` 范围；如果已有托管路径超出当前范围，清理会在修改任何文件前停止。
+
+### 运行时状态位置
+
+红队会话状态和 memory 不写入安装 manifest，也不跟随项目目录保存。运行时只使用：
+
+```text
+$CODEX_HOME/redteam-mode/state/sessions/<session_id>.json
+$CODEX_HOME/redteam-mode/state/memory/<session_id>.json
+```
+
+未设置 `CODEX_HOME` 时，上述 `$CODEX_HOME` 表示 `~/.codex`。安装器参数 `--codex-home` 只决定文件安装位置；使用自定义安装目录时，建议以相同环境变量启动 Codex：
+
+```bash
+CODEX_HOME=/opt/codex/home codex
+```
+
+不设置匹配的环境变量也可以运行，但状态会回退到 `~/.codex`。状态文件以 Codex session ID 命名，正常情况下不同会话不会发生冲突。
+
+`--project-home` 不会让运行时状态变成项目本地状态。项目级安装同样使用当前 `CODEX_HOME`，未设置时使用 `~/.codex`。同一个 `CODEX_HOME` 下的不同 Codex config profile 共享状态根目录，但仍按 session ID 隔离。
+
+卸载只移除托管的项目/plugin 文件，不会自动删除会话状态和 memory。如需手动清理，请确认当前 Codex Home 后删除对应目录：
+
+```text
+$CODEX_HOME/redteam-mode/state
+~/.codex/redteam-mode/state
+```
 
 ### 安装器做了什么
 
@@ -186,7 +212,7 @@ enable red team mode
 disable red team mode
 ```
 
-关闭模式只会停止后续结构化路由。`instruction.ctf.md` 基础 profile 和当前任务的历史上下文仍然有效；使用 `/clear` 或新建任务可移除之前的会话级上下文。
+关闭模式会停止后续结构化路由，并将当前 session 状态文件重置为 normal，但不会删除该文件。`instruction.ctf.md` 基础 profile 和当前任务的历史上下文仍然有效；使用 `/clear` 或新建任务可移除之前的会话级上下文。
 
 ### 模式说明
 

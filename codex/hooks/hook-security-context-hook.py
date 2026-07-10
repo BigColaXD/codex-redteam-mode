@@ -33,6 +33,8 @@ def main() -> None:
         return
 
     session_id = extract_session_id(payload)
+    if not session_id:
+        return
     state = load_runtime_state(session_id=session_id)
 
     mode = parse_mode_command(prompt)
@@ -46,6 +48,7 @@ def main() -> None:
                     "[mode] Structured red-team routing disabled for future turns. "
                     "No new phase/router/pack/leaf context will be injected. "
                     "The base instruction.ctf.md profile and previous task context remain active. "
+                    "The session state file remains stored with mode reset to normal. "
                     "Use /clear or start a new task to remove prior per-session context.",
                 )
             )

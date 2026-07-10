@@ -114,15 +114,31 @@ def default_state(session_id: str | None = None) -> RedTeamState:
     return RedTeamState(last_changed=now_iso(), session_id=session_id or "")
 
 
+def codex_home() -> Path:
+    configured = os.environ.get("CODEX_HOME", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve(strict=False)
+    return (Path.home() / ".codex").resolve(strict=False)
+
+
+def state_root() -> Path:
+    return codex_home() / "redteam-mode" / "state"
+
+
 def state_dir() -> Path:
-    temp_dir = Path(os.environ.get("TEMP") or os.environ.get("TMP") or str(Path.home()))
-    return temp_dir / "codex_redteam_mode_states"
+    return state_root() / "sessions"
+
+
+def memory_dir() -> Path:
+    return state_root() / "memory"
 
 
 def _safe_session_key(session_id: str | None) -> str:
-    raw = (session_id or "global").strip() or "global"
+    raw = (session_id or "").strip()
+    if not raw:
+        raise ValueError("session_id is required for persistent red-team state")
     safe = re.sub(r"[^a-zA-Z0-9_.-]+", "_", raw)
-    return safe[:120] or "global"
+    return safe[:120]
 
 
 def state_path(session_id: str | None = None) -> Path:
@@ -135,6 +151,8 @@ def _coerce_state_payload(raw: dict) -> dict:
 
 
 def load_state(session_id: str | None = None) -> RedTeamState:
+    if not session_id or not session_id.strip():
+        return default_state()
     path = state_path(session_id)
     if not path.exists():
         return default_state(session_id)
@@ -152,12 +170,14 @@ def load_state(session_id: str | None = None) -> RedTeamState:
 
 def save_state(state: RedTeamState, session_id: str | None = None) -> None:
     state = state.normalized()
-    if session_id:
-        state.session_id = session_id
+    effective_session_id = (session_id or state.session_id).strip()
+    if not effective_session_id:
+        return
+    state.session_id = effective_session_id
     state.last_changed = now_iso()
     directory = state_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    target = state_path(session_id or state.session_id or "global")
+    target = state_path(effective_session_id)
     tmp = target.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(asdict(state), ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(target)
@@ -165,5 +185,6 @@ def save_state(state: RedTeamState, session_id: str | None = None) -> None:
 
 def reset_state(session_id: str | None = None) -> RedTeamState:
     state = default_state(session_id)
-    save_state(state, session_id=session_id)
+    if session_id and session_id.strip():
+        save_state(state, session_id=session_id)
     return state
