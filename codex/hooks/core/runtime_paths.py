@@ -14,7 +14,10 @@ def project_root_from_codex_dir(codex_dir: Path) -> Path:
 
 def manifest_candidates(codex_dir: Path) -> list[Path]:
     project_root = project_root_from_codex_dir(codex_dir)
-    candidates = [project_root / ".codex" / MANIFEST_NAME]
+    candidates = [
+        codex_dir / MANIFEST_NAME,
+        project_root / ".codex" / MANIFEST_NAME,
+    ]
     env_codex = os.environ.get("CODEX_HOME")
     if env_codex:
         candidates.append(Path(env_codex).expanduser() / MANIFEST_NAME)

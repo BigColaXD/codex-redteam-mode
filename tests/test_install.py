@@ -462,6 +462,35 @@ def test_runtime_log_root_comes_from_manifest(tmp_path: Path, monkeypatch: pytes
     assert resolved == log_root
 
 
+def test_runtime_manifest_resolves_from_current_codex_dir_without_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    codex_home = tmp_path / "custom-codex"
+    custom_root = tmp_path / "custom-agents" / "skills"
+    log_root = tmp_path / "custom-logs"
+    fake_home = tmp_path / "home"
+    _write_skill(custom_root)
+    manifest = codex_home / "redteam-install-manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        json.dumps(
+            {
+                "log_root": str(log_root),
+                "custom_skill_dirs_enabled": True,
+                "skills_paths": {
+                    "skills_root": str(custom_root),
+                    "skill_dirs": [str(custom_root / "redteam-demo")],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_paths.Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(skill_card.Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+
+    assert runtime_paths.resolve_log_root(codex_home) == log_root
+    assert skill_card.resolve_skills_dir(codex_home) == custom_root
+
+
 def test_runtime_log_root_falls_back_to_user_codex_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = tmp_path / "project"
     fake_home = tmp_path / "home"
