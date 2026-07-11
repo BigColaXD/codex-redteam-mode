@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, copy, json, os, platform, re, shutil, subprocess, sys
+import argparse, copy, json, os, platform, re, shlex, shutil, subprocess, sys
 from datetime import datetime
 from pathlib import Path
 try:
@@ -210,9 +210,16 @@ def seed_prompt_files(repo_root:Path,codex_home:Path,dry_run:bool)->None:
         if dry_run: continue
         dst.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(src,dst)
 def build_hooks_payload(repo_root:Path,codex_home:Path)->dict:
-    src=repo_root/'templates'/'hooks.json.template'; python_cmd=sys.executable; script_dir=str(codex_home/'hooks')
-    python_cmd_json=json.dumps(python_cmd)[1:-1]; script_dir_json=json.dumps(script_dir)[1:-1]
-    payload=json.loads(src.read_text(encoding='utf-8-sig').replace('{{PYTHON_CMD}}', python_cmd_json).replace('{{CODEX_HOOKS_DIR}}', script_dir_json))
+    src=repo_root/'templates'/'hooks.json.template'; python_cmd=str(Path(sys.executable).resolve(strict=False)); hooks_dir=codex_home/'hooks'
+    commands={
+        '{{SESSION_COMMAND}}':shlex.join([python_cmd,'-B',str(hooks_dir/'session-start-context.py')]),
+        '{{SESSION_COMMAND_WINDOWS}}':subprocess.list2cmdline([python_cmd,'-B',str(hooks_dir/'session-start-context.py')]),
+        '{{PROMPT_COMMAND}}':shlex.join([python_cmd,'-B',str(hooks_dir/'hook-security-context-hook.py')]),
+        '{{PROMPT_COMMAND_WINDOWS}}':subprocess.list2cmdline([python_cmd,'-B',str(hooks_dir/'hook-security-context-hook.py')]),
+    }
+    rendered=src.read_text(encoding='utf-8-sig')
+    for placeholder,command in commands.items(): rendered=rendered.replace(placeholder,json.dumps(command)[1:-1])
+    payload=json.loads(rendered)
     return validate_hooks_payload(payload,src)
 def managed_agents_block(repo_root:Path)->str:
     body=(repo_root/'codex'/'AGENTS.md').read_text(encoding='utf-8').strip()

@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{PYTHON_CMD}} -B {{CODEX_HOOKS_DIR}}/session-start-context.py",
+            "command": "{{SESSION_COMMAND}}",
+            "commandWindows": "{{SESSION_COMMAND_WINDOWS}}",
             "statusMessage": "Loading session mode context",
             "timeout": 15
           }
@@ -17,7 +18,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{PYTHON_CMD}} -B {{CODEX_HOOKS_DIR}}/hook-security-context-hook.py",
+            "command": "{{PROMPT_COMMAND}}",
+            "commandWindows": "{{PROMPT_COMMAND_WINDOWS}}",
             "statusMessage": "Checking mode-gated offensive routing",
             "timeout": 15
           }
