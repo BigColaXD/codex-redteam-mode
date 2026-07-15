@@ -21,7 +21,8 @@ def manifest_candidates(codex_dir: Path) -> list[Path]:
     env_codex = os.environ.get("CODEX_HOME")
     if env_codex:
         candidates.append(Path(env_codex).expanduser() / MANIFEST_NAME)
-    candidates.append(Path.home() / ".codex" / MANIFEST_NAME)
+    else:
+        candidates.append(Path.home() / ".codex" / MANIFEST_NAME)
     seen: set[str] = set()
     unique: list[Path] = []
     for candidate in candidates:
@@ -46,6 +47,9 @@ def load_runtime_manifest(codex_dir: Path) -> dict | None:
 
 
 def default_log_root() -> Path:
+    env_codex = os.environ.get("CODEX_HOME", "").strip()
+    if env_codex:
+        return Path(env_codex).expanduser() / "logs" / "codex-redteam"
     return Path.home() / ".codex" / "logs" / "codex-redteam"
 
 

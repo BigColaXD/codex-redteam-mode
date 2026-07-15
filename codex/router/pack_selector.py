@@ -1,6 +1,6 @@
 from __future__ import annotations
 from .mappings import PHASE_DEFAULT_PACK, ROUTER_PACK_MAP
-PHASE_FIRST_PACKS = {"ad","postex","reverse","code-audit","payload","evasion","cloud","container","network","crypto","mobile"}
+PHASE_FIRST_PACKS = {"ad","postex","reverse","code-audit","payload","evasion","cloud","container","network","crypto","mobile","jailbreak"}
 def select_skill_pack(phase: str, router: str) -> str:
     if phase in PHASE_FIRST_PACKS:
         return PHASE_DEFAULT_PACK.get(phase, "red-team-command-doctrine")

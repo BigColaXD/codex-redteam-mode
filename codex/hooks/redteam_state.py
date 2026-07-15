@@ -67,6 +67,8 @@ class RedTeamState:
     selected_tools: list = field(default_factory=list)
     last_action: str = ""
     last_reason: str = ""
+    active_model: str = ""
+    active_prompt_profile: str = ""
 
     def normalized(self) -> "RedTeamState":
         return RedTeamState(
@@ -103,6 +105,8 @@ class RedTeamState:
             selected_tools=list(self.selected_tools) if isinstance(self.selected_tools, list) else [],
             last_action=self.last_action or "",
             last_reason=self.last_reason or "",
+            active_model=self.active_model or "",
+            active_prompt_profile=self.active_prompt_profile or "",
         )
 
 

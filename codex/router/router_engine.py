@@ -55,4 +55,5 @@ def select_router(prompt: str, phase: str) -> str:
         if re.search("\\b(ssl pinning|certificate pinning|frida|objection)\\b|\u8bc1\u4e66\u9501\u5b9a|SSL Pinning", p, re.I): return "mobile-ssl-pinning-bypass"
         if re.search("\\b(ios|ipa|swift|xcode)\\b|iOS|\u82f9\u679c", p, re.I): return "ios-pentesting-tricks"
         return "android-pentesting-tricks"
+    if phase == "jailbreak": return "llm-prompt-injection"
     return PHASE_DEFAULT_ROUTER.get(phase, "hack")

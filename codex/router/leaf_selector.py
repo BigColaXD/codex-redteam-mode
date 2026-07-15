@@ -17,6 +17,7 @@ def select_subphase(prompt: str, phase: str) -> str:
 
 def select_leaf_skill(prompt: str, phase: str, router: str) -> str:
     p = prompt
+    if router == "llm-prompt-injection": return "llm-prompt-injection"
     if router == "auth-sec":
         if re.search("\\b(jwt|token)\\b|\u4ee4\u724c|JWT", p, re.I): return "jwt-oauth-token-attacks"
         if re.search(r"\b(oauth|oidc)\b|OAuth|OIDC", p, re.I): return "oauth-oidc-misconfiguration"

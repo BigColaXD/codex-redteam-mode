@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+import importlib
 import os
 import re
 import tomllib
@@ -57,14 +58,7 @@ ACTIVE_AUTOMATION_MODES = {"active", "auto", "assisted", "execute", "execution"}
 PLAN_ONLY_AUTOMATION_MODES = {"off", "false", "0", "plan", "plan-only", "plan_only", "dry-run"}
 
 
-def _automation_mode_from_config(codex_dir: Path, redteam_mode: str) -> str:
-    if redteam_mode not in {"redteam-light", "redteam-full"}:
-        return "plan-only"
-
-    raw_env = os.environ.get("CODEX_REDTEAM_AUTOMATION_MODE", "").strip().casefold()
-    if raw_env:
-        return "active" if raw_env in ACTIVE_AUTOMATION_MODES else "plan-only"
-
+def _automation_configs(codex_dir: Path) -> list[tuple[dict, Path]]:
     candidates: list[Path] = []
     env_config = os.environ.get("CODEX_REDTEAM_CONFIG", "").strip()
     if env_config:
@@ -76,6 +70,7 @@ def _automation_mode_from_config(codex_dir: Path, redteam_mode: str) -> str:
     ])
 
     seen: set[str] = set()
+    resolved: list[tuple[dict, Path]] = []
     for candidate in candidates:
         key = str(candidate)
         if key in seen or not candidate.is_file():
@@ -85,6 +80,20 @@ def _automation_mode_from_config(codex_dir: Path, redteam_mode: str) -> str:
             config = tomllib.loads(candidate.read_text(encoding="utf-8-sig"))
         except (OSError, tomllib.TOMLDecodeError):
             continue
+        if isinstance(config, dict):
+            resolved.append((config, candidate))
+    return resolved
+
+
+def _automation_mode_from_config(codex_dir: Path, redteam_mode: str) -> str:
+    if redteam_mode not in {"redteam-light", "redteam-full"}:
+        return "plan-only"
+
+    raw_env = os.environ.get("CODEX_REDTEAM_AUTOMATION_MODE", "").strip().casefold()
+    if raw_env:
+        return "active" if raw_env in ACTIVE_AUTOMATION_MODES else "plan-only"
+
+    for config, _ in _automation_configs(codex_dir):
         features = config.get("features", {}) if isinstance(config, dict) else {}
         automation_cfg = config.get("automation", {}) if isinstance(config, dict) else {}
         if isinstance(features, dict) and features.get("automation") is False:
@@ -101,29 +110,8 @@ def _automation_mode_from_config(codex_dir: Path, redteam_mode: str) -> str:
 
 def _mcp_inventory_paths_from_config(codex_dir: Path) -> list[Path]:
     """Read mcp_inventory_files from config.toml and return resolved paths."""
-    candidates: list[Path] = []
-    env_config = os.environ.get("CODEX_REDTEAM_CONFIG", "").strip()
-    if env_config:
-        candidates.append(Path(env_config).expanduser())
-    candidates.extend([
-        codex_dir / "config.toml",
-        codex_dir.parent / "config.toml",
-        Path.home() / ".codex" / "config.toml",
-    ])
-
-    seen: set[str] = set()
-    for candidate in candidates:
-        key = str(candidate)
-        if key in seen or not candidate.is_file():
-            continue
-        seen.add(key)
-        try:
-            config = tomllib.loads(candidate.read_text(encoding="utf-8-sig"))
-        except (OSError, tomllib.TOMLDecodeError):
-            continue
-        if not isinstance(config, dict):
-            continue
-        automation_cfg = config.get("automation", {})
+    for config, candidate in _automation_configs(codex_dir):
+        automation_cfg = config.get("automation", {}) if isinstance(config, dict) else {}
         if not isinstance(automation_cfg, dict):
             continue
         raw_files = automation_cfg.get("mcp_inventory_files", [])
@@ -131,6 +119,41 @@ def _mcp_inventory_paths_from_config(codex_dir: Path) -> list[Path]:
             base = candidate.parent
             return [base / f if not Path(f).is_absolute() else Path(f) for f in raw_files if isinstance(f, str) and f.strip()]
     return []
+
+
+def _automation_executor_from_config(codex_dir: Path, automation_mode: str) -> tuple[Executor, tuple[str, ...]]:
+    executor = Executor(plan_only=automation_mode != "active")
+    if executor.plan_only:
+        return executor, ()
+
+    raw_adapters: dict = {}
+    for config, _ in _automation_configs(codex_dir):
+        automation_cfg = config.get("automation", {}) if isinstance(config, dict) else {}
+        if not isinstance(automation_cfg, dict) or "adapters" not in automation_cfg:
+            continue
+        candidate_adapters = automation_cfg.get("adapters", {})
+        if not isinstance(candidate_adapters, dict):
+            return executor, ("automation.adapters must be a TOML table",)
+        raw_adapters = candidate_adapters
+        break
+
+    errors: list[str] = []
+    for tool_name, raw_spec in raw_adapters.items():
+        spec = str(raw_spec).strip()
+        module_name, separator, attribute_name = spec.partition(":")
+        if not separator or not module_name or not attribute_name:
+            errors.append(f"{tool_name}: expected module:function")
+            continue
+        try:
+            adapter = getattr(importlib.import_module(module_name), attribute_name)
+        except (ImportError, AttributeError) as exc:
+            errors.append(f"{tool_name}: {exc}")
+            continue
+        if not callable(adapter):
+            errors.append(f"{tool_name}: configured adapter is not callable")
+            continue
+        executor.register_adapter(str(tool_name), adapter)
+    return executor, tuple(errors)
 
 
 @dataclass
@@ -332,6 +355,24 @@ def _bounded_recent_artifacts(items: list[object], limit: int = 24) -> list[obje
     return items[-limit:]
 
 
+def _runtime_memory_fields(memory: dict, working: RedTeamState, artifact: object | None = None) -> dict:
+    artifact_kinds: list[str] = []
+    for item in [*memory.get("recent_artifacts", []), *working.recent_artifacts]:
+        kind = item.get("kind", "") if isinstance(item, dict) else str(item)
+        if kind and kind not in artifact_kinds:
+            artifact_kinds.append(kind)
+    if artifact is not None:
+        kind = artifact.__class__.__name__
+        if kind not in artifact_kinds:
+            artifact_kinds.append(kind)
+    return {
+        "cve_candidates": list(memory.get("cve_candidates", [])),
+        "recent_artifacts": _bounded_recent_artifacts(
+            [{"kind": kind} for kind in artifact_kinds]
+        ),
+    }
+
+
 # ---------------------------------------------------------------------------
 # P3c: Build LoopRuntimeState from controller context
 # ---------------------------------------------------------------------------
@@ -371,11 +412,11 @@ def _build_loop_runtime_state(
         stagnation_count=working.stagnation_count,
         tool_failure_count=0,
         pseudo_complete_count=working.pseudo_complete_count,
-        recent_artifacts=tuple(
+        recent_artifacts=tuple(dict.fromkeys(
             item.get("kind", "") if isinstance(item, dict) else str(item)
-            for item in memory.get("recent_artifacts", [])
-            if item
-        ),
+            for item in [*memory.get("recent_artifacts", []), *working.recent_artifacts]
+            if item and (not isinstance(item, dict) or item.get("kind"))
+        )),
         notes=notes,
     )
 
@@ -615,12 +656,18 @@ def process_turn(
         # Create LoopRuntime instance pointing to session logs
         log_root = resolve_log_root(codex_dir) / (working.session_id or "default")
         mcp_paths = _mcp_inventory_paths_from_config(codex_dir)
+        executor, adapter_errors = _automation_executor_from_config(codex_dir, automation_mode)
+        for adapter_error in adapter_errors:
+            automation_brief_lines.append(f"[automation-adapter:error] {adapter_error}")
+        if automation_mode == "active":
+            registered = ",".join(executor.registered_tools()) or "none"
+            automation_brief_lines.append(f"[automation-adapters:{registered}]")
         runtime = LoopRuntime(
             log_root=log_root,
             max_retries=1,
             recon_ctx=recon_ctx,
             tool_config_paths=mcp_paths or None,
-            executor=Executor(plan_only=automation_mode != "active"),
+            executor=executor,
         )
         
         # Run a single observe-decide-act-verify cycle
@@ -713,10 +760,7 @@ def process_turn(
             "coverage_tags_seen": seen_tags,
             "coverage_tags_pending": pending_tags,
             "acceptance_checks": list(selection.taskbook.acceptance_checks),
-            "recent_artifacts": _bounded_recent_artifacts(
-                list(memory.get("recent_artifacts", []))
-                + ([{"kind": artifact.__class__.__name__}] if artifact else [])
-            ),
+            **_runtime_memory_fields(memory, working, artifact),
         },
     )
     append_long_memory(

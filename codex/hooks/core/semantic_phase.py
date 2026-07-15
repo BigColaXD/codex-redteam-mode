@@ -69,6 +69,12 @@ PHASE_EXAMPLES: dict[str, list[str]] = {
         "review a mobile application from frida objection and ssl pinning angles",
         "\u5206\u6790\u5b89\u5353\u6216 iOS \u5e94\u7528\u7684\u6293\u5305\u3001\u8bc1\u4e66\u9501\u5b9a\u4e0e\u79fb\u52a8\u7aef\u653b\u51fb\u9762",
     ],
+    "jailbreak": [
+        "evaluate a model jailbreak prompt instruction hierarchy refusal behavior and regression bank",
+        "analyze prompt injection unrestricted mode guardrail bypass and model-specific instruction switching",
+        "\u5206\u6790\u6a21\u578b\u8d8a\u72f1\u63d0\u793a\u8bcd\u3001\u6307\u4ee4\u4f18\u5148\u7ea7\u3001\u62d2\u7b54\u884c\u4e3a\u548c\u56de\u5f52\u6d4b\u8bd5",
+        "\u5b9e\u73b0 Codex \u5728\u5207\u6362\u6a21\u578b\u540e\u81ea\u52a8\u5207\u6362\u5bf9\u5e94\u7684\u7834\u7532\u6307\u4ee4",
+    ],
 }
 
 TOKEN_RE = re.compile(r"[a-z0-9_./-]+|[\u4e00-\u9fff]")

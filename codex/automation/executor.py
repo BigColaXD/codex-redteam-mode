@@ -41,6 +41,9 @@ class Executor:
     ) -> None:
         self._adapters[str(tool_name)] = adapter
 
+    def registered_tools(self) -> tuple[str, ...]:
+        return tuple(self._adapters)
+
     def run_step(self, step: AutomationStep, args: Mapping[str, object] | None = None) -> ExecutionResult:
         args = args or {}
         if self.plan_only:

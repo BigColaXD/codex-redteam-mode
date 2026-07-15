@@ -11,7 +11,7 @@ for candidate in (HOOKS_DIR, CODEX_DIR):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from core import build_prompt_chain_notice, build_redteam_mode_overlay, emit_hook_json, extract_session_id, extract_session_start_source, extract_transcript_path, load_runtime_state, reset_runtime_state
+from core import build_prompt_chain_notice, build_redteam_mode_overlay, emit_hook_json, extract_session_id, extract_session_start_source, extract_transcript_path, load_runtime_state, reset_runtime_state, resolve_model_prompt_profile, save_runtime_state
 from core.context_prepoison import build_prepoisoned_context
 from core.prompt_parser import decode_stdin, load_payload
 from core.refusal_backstop import session_start_backstop_messages
@@ -22,6 +22,7 @@ def main() -> None:
     session_id = None
     transcript_path = None
     source = ""
+    payload = {}
     if raw.strip():
         try:
             payload = load_payload(raw)
@@ -30,6 +31,7 @@ def main() -> None:
             source = extract_session_start_source(payload)
         except Exception:
             session_id = None
+            payload = {}
 
     state = load_runtime_state(session_id=session_id) if source in {"resume", "compact"} else reset_runtime_state(session_id=session_id)
     if state.mode == "normal":
@@ -56,6 +58,14 @@ def main() -> None:
         mode_overlay = build_redteam_mode_overlay(CODEX_DIR, state.mode)
         if mode_overlay:
             context = f"{context}\n{mode_overlay}"
+
+        profile = resolve_model_prompt_profile(CODEX_DIR, payload=payload, transcript_path=transcript_path)
+        state.active_model = profile.model
+        state.active_prompt_profile = profile.profile
+        save_runtime_state(state, session_id=session_id)
+        model_overlay = profile.render()
+        if model_overlay:
+            context = f"{context}\n{model_overlay}"
 
         backstop = session_start_backstop_messages(session_id, transcript_path=transcript_path)
         if backstop:
