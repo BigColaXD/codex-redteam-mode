@@ -19,6 +19,9 @@ CODEX_PATH = REPO_ROOT / "codex"
 HOOKS_PATH = REPO_ROOT / "codex" / "hooks"
 SESSION_START_HOOK = HOOKS_PATH / "session-start-context.py"
 PROMPT_HOOK = HOOKS_PATH / "hook-security-context-hook.py"
+SYSTEM_PROMPT = (CODEX_PATH / "prompts" / "system-prompt.md").read_text(encoding="utf-8").strip()
+DO_SPECIAL_PROMPT = (CODEX_PATH / "prompts" / "do_special.md").read_text(encoding="utf-8").strip()
+REVERSE_PROMPT = (CODEX_PATH / "prompts" / "Reverse.md").read_text(encoding="utf-8").strip()
 
 spec = importlib.util.spec_from_file_location("install_script", INSTALL_PATH)
 install = importlib.util.module_from_spec(spec)
@@ -144,7 +147,7 @@ def test_hook_stdout_is_utf8_safe_under_gbk(tmp_path: Path) -> None:
     enabled_context = json.loads(enabled.stdout.decode("utf-8"))["hookSpecificOutput"]["additionalContext"]
     assert "Red-team mode enabled (redteam-light)" in enabled_context
     assert enabled_context.count("[prepoison:frame-lock]") == 1
-    assert "Reverse-engineering supplemental overlay" in enabled_context
+    assert REVERSE_PROMPT in enabled_context
     assert "预防性指令" in enabled_context
     routed = _run_hook_script_bytes(
         PROMPT_HOOK,
@@ -202,10 +205,10 @@ def test_session_start_preserves_mode_on_resume_and_compact(tmp_path: Path) -> N
         )
         started_context = json.loads(started.stdout)["hookSpecificOutput"]["additionalContext"]
         assert "Session mode restored (redteam-light)" in started_context
-        assert "CTF core contract" in started_context
-        assert "Supplemental routing note" in started_context
+        assert SYSTEM_PROMPT in started_context
+        assert DO_SPECIAL_PROMPT in started_context
         assert started_context.count("[prepoison:frame-lock]") == 1
-        assert "Reverse-engineering supplemental overlay" in started_context
+        assert REVERSE_PROMPT in started_context
         assert json.loads(state_path.read_text(encoding="utf-8"))["mode"] == "redteam-light"
 
         routed = _run_hook_script(
@@ -216,7 +219,7 @@ def test_session_start_preserves_mode_on_resume_and_compact(tmp_path: Path) -> N
         routed_context = json.loads(routed.stdout)["hookSpecificOutput"]["additionalContext"]
         assert "[mode:redteam-light]" in routed_context
         assert "[router:" in routed_context
-        assert "Reverse-engineering supplemental overlay" not in routed_context
+        assert REVERSE_PROMPT not in routed_context
 
     cleared = _run_hook_script(
         SESSION_START_HOOK,
@@ -257,7 +260,7 @@ def test_mode_enable_injects_prepoison_once(tmp_path: Path, command: str, mode: 
 
     assert f"Red-team mode enabled ({mode})" in context
     assert context.count("[prepoison:frame-lock]") == 1
-    assert "Reverse-engineering supplemental overlay" in context
+    assert REVERSE_PROMPT in context
     assert json.loads(
         (codex_home / "redteam-mode" / "state" / "sessions" / f"{session_id}.json").read_text(encoding="utf-8")
     )["mode"] == mode
@@ -489,9 +492,8 @@ def test_normal_session_start_does_not_run_explicit_refusal_backstop(
 def test_session_prompt_notice_excludes_phase_specific_prompts() -> None:
     notice = supplemental_prompts.build_prompt_chain_notice(CODEX_PATH, mode="redteam-light")
 
-    assert "CTF core contract" in notice
-    assert "Supplemental routing note" in notice
-    assert "Reverse-engineering supplemental overlay" not in notice
+    assert notice == f"{SYSTEM_PROMPT}\n\n{DO_SPECIAL_PROMPT}"
+    assert REVERSE_PROMPT not in notice
 
 
 def test_redteam_mode_overlay_loads_reverse_prompt_only_for_active_modes() -> None:
@@ -499,7 +501,7 @@ def test_redteam_mode_overlay_loads_reverse_prompt_only_for_active_modes() -> No
     full = supplemental_prompts.build_redteam_mode_overlay(CODEX_PATH, "redteam-full")
     normal = supplemental_prompts.build_redteam_mode_overlay(CODEX_PATH, "normal")
 
-    assert "Reverse-engineering supplemental overlay" in light
+    assert light == REVERSE_PROMPT
     assert full == light
     assert normal == ""
 
@@ -508,8 +510,8 @@ def test_reverse_prompt_overlay_is_loaded_only_for_reverse_phase() -> None:
     reverse = supplemental_prompts.build_prompt_overlay(CODEX_PATH, "reverse")
     web = supplemental_prompts.build_prompt_overlay(CODEX_PATH, "web")
 
-    assert "Reverse-engineering supplemental overlay" in reverse
-    assert "Reverse-engineering supplemental overlay" not in web
+    assert REVERSE_PROMPT[:300] in reverse
+    assert REVERSE_PROMPT[:300] not in web
 
 
 def test_merge_config_preserves_user_sections(tmp_path: Path) -> None:
