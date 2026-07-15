@@ -155,48 +155,6 @@ $CODEX_HOME/redteam-mode/state
 ~/.codex/redteam-mode/state
 ```
 
-### 安装器做了什么
-
-1. **配置预检** — 在复制或清理任何文件前，先解析并规划 `config.toml` 与 `hooks.json` 合并；已有配置非法时，安装会失败且不留下部分安装痕迹
-2. **升级清理** — 同时读取正式 manifest 和 pending install transaction，先检查两者目标并集是否属于当前清理范围，再移除旧版本、未完成安装目标及已知历史残留
-3. **系统提示词** — 将用户已有系统指令（如有）+ `instruction.ctf.md` + GPT-5.x Profile 路由目录合成为 `redteam-mode/system-instructions.md`，并让 `model_instructions_file` 指向该文件
-4. **Hooks** — 部署 `session-start-context.py`、`hook-security-context-hook.py`、`redteam_state.py`、`core/` 到选定 Codex Home 的 `hooks/`
-5. **子系统** — 部署 `router/`、`orchestrator/`、`automation/`、`session_patcher/` 到选定 Codex Home
-6. **技能包** — 部署全部 36 个 SKILL.md 领域卡从 `agents/skills/` 到选定的 agents 目录（每个 skill 目录仅复制 SKILL.md）
-7. **Seed prompts** — 复制 prompt 文件到选定 Codex Home 的 `prompts/` 目录（已有文件跳过不覆盖）
-8. **合并 hooks.json** — 清除旧的托管 hooks，注入当前版本的 `SessionStart` 和 `UserPromptSubmit` hooks（保留用户自定义 hooks）
-9. **合并 AGENTS.md** — 在选定 Codex Home 的 `AGENTS.md` 中注入或更新托管块，作为全局 guidance；使用 `--project-home` 时写入 `<project>/AGENTS.md`，作为项目级 guidance（`<!-- codex-redteam-optin-mode:start -->`），块外用户内容不受影响
-10. **验证候选安装** — 使用候选 manifest 运行 `scripts/validate.py`，检查已部署文件、各子系统以及 skill 的安装目录和运行时实际选择目录
-11. **提交 manifest** — 仅在验证成功后原子替换 `redteam-install-manifest.json` 并删除 pending transaction；部署或验证失败时保留 previous/candidate 目标供重试或卸载恢复
-
-### 升级与幂等性
-
-安装器是**幂等**的——多次运行不会重复注入 hooks 或 AGENTS.md 块。
-
-每次运行时，先读取旧版本 manifest，仅移除本项目托管的旧安装文件，再从当前版本重新部署。这意味着：
-- 版本升级干净，同时不触碰用户自己的文件
-- `config.toml` 使用合并而不是覆盖；已有用户配置会保留，实际修改已有配置前会创建 `config.toml.YYYYMMDDHHMMSS.bak` 备份
-- 用户已有的 `model_instructions_file` 内容会保留在组合系统提示词的第一段；原配置值写入 manifest，卸载时恢复
-- `config.toml` 合并使用 `tomlkit`，避免 `[[skills.config]]` 等数组表吞入本应属于 `[automation]` 的键
-- manifest 会记录安装器新增的每个 `config.toml` 值和表；卸载会先移除仍保持原值的安装器托管项，再删除被引用文件，用户修改过的值会保留
-- 对于没有字段所有权元数据的旧 manifest，如果 `config.toml` 仍引用 `instruction.ctf.md`，卸载会保留该文件，避免卸载后 Codex 配置失效
-- 已有 `config.toml`、`hooks.json`、安装 manifest 或 pending transaction 非法时会在预检阶段失败，不会复制新文件，也不会清理旧路径；安装器与验证器均一致支持带 UTF-8 BOM 的 config 与 hooks
-- POSIX hooks 使用安全的 shell 参数拼接，Windows hooks 使用编码后的 PowerShell 命令，因此 Python 或 Codex Home 路径中的空格、Unicode、引号和 `cmd.exe` 元字符不会被重新解释
-- 升级会在清理前写入 pending transaction；重试和卸载会处理 previous/candidate 目标并集，验证成功后才原子提交正式 manifest 并移除事务
-- GitHub Actions 使用 Python 3.11 在 Windows、Ubuntu 和 macOS 上运行完整测试套件
-- 升级或卸载时，如果仍存在的托管路径超出当前清理范围，会在修改任何文件前终止并保留 manifest，用户可使用原始路径参数重试
-- 自定义 `--agents-home` 未启用运行时优先级时安装器会给出警告；验证器会报告运行时 skill 根目录是否与安装目录一致
-- `SessionStart` 和 `UserPromptSubmit` 只输出 Codex schema 支持的 wire 字段；路由 phase 保留在 `additionalContext` 中，不再作为未知字段序列化
-- `SessionStart(source=resume|compact)` 保留已有会话模式，`startup` 与 `clear` 则重置为 normal
-- 启用红队模式以及 `SessionStart(source=resume|compact)` 时会直接注入完整的 `Reverse.md` 补充上下文；normal startup 不注入这一模式级 overlay
-- hook stdout 使用 ASCII-safe JSON，避免 Windows 传统代码页破坏 UTF-8 JSON 协议或中文上下文
-- 相对安装参数以安装命令的工作目录为基准解析，生成的 hooks 和 manifest 字段均使用绝对路径
-- `copy_tree` 整目录替换托管目录（`router/`、`orchestrator/` 等），skill 目录仅复制 `SKILL.md`
-- `AGENTS.md`、`hooks.json` 和 `config.toml` 不会被升级清理删除——使用合并逻辑，用户自定义内容不受影响
-- 项目级安装会将 managed AGENTS block 放在 `<project>/AGENTS.md`；旧的 `<project>/.codex/AGENTS.md` managed block 会安全迁移
-- 不会把 Python 缓存文件（`__pycache__`、`.pyc`、`.pyo`）复制到安装后的运行时目录
-- 如果 manifest 丢失，安装器回退到清理当前目标集合 + 已知历史残留路径
-
 ```bash
 # 重复执行安全——每次结果一致
 python scripts/install.py
