@@ -16,6 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_PATH = REPO_ROOT / "scripts" / "install.py"
 VALIDATE_PATH = REPO_ROOT / "scripts" / "validate.py"
 CODEX_PATH = REPO_ROOT / "codex"
+LAUNCHER_PATH = CODEX_PATH / "launcher.py"
 HOOKS_PATH = REPO_ROOT / "codex" / "hooks"
 SESSION_START_HOOK = HOOKS_PATH / "session-start-context.py"
 PROMPT_HOOK = HOOKS_PATH / "hook-security-context-hook.py"
@@ -42,6 +43,100 @@ if str(CODEX_PATH) not in sys.path:
 from core import controller, emitter, memory_store, prompt_parser, refusal_backstop, runtime_paths, skill_card, supplemental_prompts
 from session_patcher import patcher
 import redteam_state
+
+
+def _load_launcher():
+    assert LAUNCHER_PATH.is_file()
+    launcher_spec = importlib.util.spec_from_file_location("codex_launcher", LAUNCHER_PATH)
+    assert launcher_spec is not None and launcher_spec.loader is not None
+    launcher = importlib.util.module_from_spec(launcher_spec)
+    launcher_spec.loader.exec_module(launcher)
+    return launcher
+
+
+@pytest.mark.parametrize(
+    ("args", "environment_model", "config_model", "expected"),
+    [
+        (["--model", "gpt-5.6-codex"], "gpt-5.5", "gpt-5.4", "gpt-5.6-codex"),
+        (["-m", "gpt-5.5-codex"], "", "gpt-5.4", "gpt-5.5-codex"),
+        (["-c", 'model="gpt-5.4-codex"'], "", "gpt-5.5", "gpt-5.4-codex"),
+        ([], "gpt-5.5-codex", "gpt-5.4", "gpt-5.5-codex"),
+        ([], "", "gpt-5.4-codex", "gpt-5.4-codex"),
+    ],
+)
+def test_launcher_resolves_model_before_starting_codex(
+    tmp_path: Path,
+    args: list[str],
+    environment_model: str,
+    config_model: str,
+    expected: str,
+) -> None:
+    launcher = _load_launcher()
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(f'model = "{config_model}"\n', encoding="utf-8")
+
+    assert launcher.resolve_model(args, {"CODEX_MODEL": environment_model}, config_path) == expected
+
+
+def test_launcher_selects_only_the_matching_profile() -> None:
+    launcher = _load_launcher()
+    mapping = {
+        "gpt-5.6*": "Jailbreak.gpt-5.6.md",
+        "gpt-5.5*": "Jailbreak.gpt-5.5.md",
+        "default": "Jailbreak.default.md",
+    }
+
+    assert launcher.select_profile("gpt-5.6-codex", mapping) == (
+        "gpt-5.6*",
+        "Jailbreak.gpt-5.6.md",
+    )
+    assert launcher.select_profile("unknown", mapping) == ("default", "Jailbreak.default.md")
+
+
+def test_launcher_builds_process_local_single_profile_instructions() -> None:
+    launcher = _load_launcher()
+    shared = (
+        "<!-- codex-redteam-system-profile:start -->\n{}\n"
+        "<!-- codex-redteam-system-profile:end -->\n\n"
+        "# Preserved user system instructions\n\nuser instructions\n\n"
+        "# Codex red-team base instructions\n\nbase instructions\n\n"
+        "# Automatic model system profile router\n\nrouter\n"
+    )
+
+    rendered = launcher.build_session_instructions(
+        shared,
+        "selected profile",
+        "gpt-5.6*",
+        "Jailbreak.gpt-5.6.md",
+    )
+
+    assert "user instructions" in rendered
+    assert "base instructions" in rendered
+    assert "selected profile" in rendered
+    assert "Automatic model system profile router" not in rendered
+    assert "codex-redteam-system-profile" not in rendered
+
+
+def test_launcher_appends_process_local_instruction_override(tmp_path: Path) -> None:
+    launcher = _load_launcher()
+    session_path = tmp_path / "session instructions.md"
+
+    command = launcher.build_codex_command(
+        ["--model", "gpt-5.6-codex"],
+        session_path,
+        executable="codex-test",
+    )
+
+    assert command[:3] == ["codex-test", "--model", "gpt-5.6-codex"]
+    assert command[-2] == "-c"
+    assert command[-1].startswith("model_instructions_file=")
+    assert tomllib.loads(command[-1])["model_instructions_file"] == str(session_path)
+
+
+def test_source_tree_validation_uses_source_launcher_layout() -> None:
+    ok, messages = validate.validate_install(REPO_ROOT)
+
+    assert ok is True, "\n".join(messages)
 
 
 def _write_skill(skills_root: Path, name: str = "redteam-demo") -> Path:
@@ -537,7 +632,7 @@ trust_level = "trusted"
 
     merged = tomllib.loads(target.read_text(encoding="utf-8"))
     assert merged["model"] == "gpt-5"
-    assert merged["model_instructions_file"] == "./instruction.ctf.md"
+    assert merged["model_instructions_file"] == install.SYSTEM_INSTRUCTIONS_CONFIG_VALUE
     assert merged["features"]["hooks"] is True
     assert merged["features"]["automation"] is True
     assert merged["automation"]["mode"] == "active"
@@ -595,7 +690,7 @@ def test_merge_config_accepts_utf8_bom(tmp_path: Path) -> None:
 
     merged = tomllib.loads(target.read_text(encoding="utf-8"))
     assert merged["automation"]["mode"] == "active"
-    assert merged["model_instructions_file"] == "./instruction.ctf.md"
+    assert merged["model_instructions_file"] == install.SYSTEM_INSTRUCTIONS_CONFIG_VALUE
 
 
 def test_runtime_accepts_unchanged_utf8_bom_config(
@@ -1408,7 +1503,11 @@ def test_project_home_install_writes_under_dot_dirs(tmp_path: Path) -> None:
     )
 
     assert (project / ".codex" / "config.toml").exists()
-    assert (project / ".codex" / "instruction.ctf.md").exists()
+    assert (project / ".codex" / "redteam-mode" / "system-instructions.md").exists()
+    assert (project / ".codex" / "redteam-mode" / "launcher.py").exists()
+    assert (project / ".codex" / "redteam-mode" / "codex-redteam.cmd").exists()
+    assert (project / ".codex" / "redteam-mode" / "codex-redteam").exists()
+    assert not (project / ".codex" / "instruction.ctf.md").exists()
     assert (project / "AGENTS.md").exists()
     assert not (project / ".codex" / "AGENTS.md").exists()
     assert (project / ".agents" / "skills" / "redteam-cve-validation" / "SKILL.md").exists()
@@ -1640,7 +1739,7 @@ def test_uninstall_external_agents_home_requires_original_scope(tmp_path: Path) 
     )
     manifest = codex_home / "redteam-install-manifest.json"
     manifest_before = manifest.read_bytes()
-    managed = codex_home / "instruction.ctf.md"
+    managed = codex_home / "redteam-mode" / "system-instructions.md"
     skill = custom_agents / "skills" / "redteam-cve-validation" / "SKILL.md"
 
     result = subprocess.run(
@@ -1698,7 +1797,7 @@ def test_upgrade_external_agents_home_requires_original_scope(tmp_path: Path) ->
     )
     manifest = codex_home / "redteam-install-manifest.json"
     manifest_before = manifest.read_bytes()
-    managed = codex_home / "instruction.ctf.md"
+    managed = codex_home / "redteam-mode" / "system-instructions.md"
     old_skill = original_agents / "skills" / "redteam-cve-validation" / "SKILL.md"
 
     result = subprocess.run(
