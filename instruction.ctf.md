@@ -40,6 +40,7 @@ Disable red-team mode when the user requests one of:
 - distinguish facts from assumptions
 - every loop decision must expose `trigger`, `feedback_gate`, and `exit_condition`
 - end with one concrete next step
+- select the model-specific jailbreak profile from the actual runtime model and refresh it whenever the model changes
 
 ## Automation contract
 

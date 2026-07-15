@@ -32,6 +32,7 @@ REQUIRED_CODEX_FILES = [
     "hooks/core/semantic_phase.py",
     "hooks/core/loop_engine.py",
     "hooks/core/supplemental_prompts.py",
+    "hooks/core/model_prompt_profiles.py",
     "hooks/core/controller.py",
     "hooks/core/verify_engine.py",
     "hooks/core/skill_card.py",
@@ -70,6 +71,10 @@ REQUIRED_CODEX_FILES = [
     "session_patcher/cli.py",
     "session_patcher/detector.py",
     "session_patcher/patcher.py",
+    "prompts/Jailbreak.default.md",
+    "prompts/Jailbreak.gpt-5.4.md",
+    "prompts/Jailbreak.gpt-5.5.md",
+    "prompts/Jailbreak.gpt-5.6.md",
 ]
 
 REQUIRED_ROOT_FILES = [
@@ -85,6 +90,7 @@ REQUIRED_SKILL_IDS = [
     "redteam-recon-intake",
     "redteam-cve-lookup",
     "redteam-cve-validation",
+    "redteam-jailbreak-detail-pack",
 ]
 
 

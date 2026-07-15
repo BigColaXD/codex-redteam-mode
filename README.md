@@ -2,7 +2,7 @@
 
 [中文说明](./README_ZH.md)
 
-**Current release:** v1.1.7
+**Current release:** v1.3.0
 
 > Structured red-team routing is off by default and must be enabled explicitly. The base `instruction.ctf.md` security profile remains active in every mode.
 
@@ -21,6 +21,7 @@ This project keeps the structured runtime opt-in: normal mode retains the base `
 
 - **Three explicit modes**: `normal` (default), `redteam-light` (targeted analysis/planning), `redteam-full` (constrained red team workflow)
 - **Structured JSON runtime state** with session-isolated state files
+- **Model-aware prompt switching** — resolves the active model from hook payload, session `turn_context`, environment, or `config.toml`, then injects the matching jailbreak profile when the model changes
 - **Rule-first phase detection** with semantic fallback for ambiguous tasks
 - **Pack-first routing mainline**: `phase → router → pack → leaf` — method is a soft hint, not the primary routing axis
 - **SKILL.md Loop Runtime domain cards** — pure Markdown `scope-not-instruct` format: each card has `## Domain` (scope declaration), `## Boundaries` (forbidden actions), `## Pivot Hints` (direction changes), `## Exit Evidence` (required artifacts and minimum attempts) — no YAML, no JSON
@@ -150,7 +151,7 @@ $CODEX_HOME/redteam-mode/state
 3. **Core files** — copies `instruction.ctf.md` and merges `config.toml` into the selected Codex Home (`~/.codex/`, custom `--codex-home`, or `<project>/.codex/`)
 4. **Hooks** — deploys `session-start-context.py`, `hook-security-context-hook.py`, `redteam_state.py`, and `core/` to the selected Codex Home's `hooks/`
 5. **Subsystems** — deploys `router/`, `orchestrator/`, `automation/`, and `session_patcher/` to the selected Codex Home
-6. **Skill packs** — deploys all 35 SKILL.md domain cards from `agents/skills/` to the selected agents home (only `SKILL.md` is copied per skill directory)
+6. **Skill packs** — deploys all 36 SKILL.md domain cards from `agents/skills/` to the selected agents home (only `SKILL.md` is copied per skill directory)
 7. **Seed prompts** — copies prompt files to the selected Codex Home's `prompts/` directory (skips existing)
 8. **Merge hooks.json** — strips old managed hooks, then injects the current `SessionStart` and `UserPromptSubmit` hooks (preserves user-defined hooks)
 9. **Merge AGENTS.md** — injects or updates a managed block (`<!-- codex-redteam-optin-mode:start -->`) into the selected Codex Home's `AGENTS.md` as global guidance, or `<project>/AGENTS.md` with `--project-home` as project guidance (preserves user content outside the block)
@@ -224,6 +225,22 @@ Disabling the mode stops future structured routing and resets the current sessio
 | `redteam-light` | No | Targeted security analysis, planning, review |
 | `redteam-full` | No | Constrained red team workflow, operations |
 
+### Automatic Model Prompt Switching
+
+When red-team mode is enabled, a session is restored, or the active model changes, the hook resolves the model in this order: payload → latest transcript `turn_context` → `CODEX_MODEL` → `config.toml`. The full profile is injected only on activation, restore, and model change; `active_model` and `active_prompt_profile` are persisted in session state.
+
+Override the default mapping in `config.toml`:
+
+```toml
+[redteam.model_prompt_profiles]
+"gpt-5.6*" = "Jailbreak.gpt-5.6.md"
+"gpt-5.5*" = "Jailbreak.gpt-5.5.md"
+"gpt-5.4*" = "Jailbreak.gpt-5.4.md"
+default = "Jailbreak.default.md"
+```
+
+Profile files live under `$CODEX_HOME/prompts/`. Model keys support glob patterns; an unmatched model or missing specialized file falls back to `default`.
+
 ## Working Flow
 
 When red-team mode is enabled, the runtime follows this mainline:
@@ -268,6 +285,13 @@ Before planning tool use, the automation layer reads the user's local MCP/tool i
 6. If a required tool, scope, or adapter is missing, block or pivot explicitly instead of pretending execution happened.
 7. Save successful adapter output as artifacts and re-check gates before advancing.
 
+Active adapters are configured explicitly as Python callables. The table key must match the discovered tool name and the value uses `module:function` syntax:
+
+```toml
+[automation.adapters]
+"WebFetch" = "my_codex_adapters:web_fetch"
+```
+
 ## Validation
 
 ```bash
@@ -288,6 +312,7 @@ Validation covers:
 - Loop runtime checks (decision tree, scope gate, adapter execution, retry, artifact saving, report gate)
 - Orchestration gate checks (scope, report, artifact)
 - Prompt-chain verification
+- Model discovery, profile hot switching, session-state updates, and dedicated jailbreak routing
 
 ## Known Limitations
 
@@ -316,6 +341,7 @@ Method layer, routing layer, and skill pack structure draw inspiration from:
 - [qiushi-skill](https://github.com/qiushi-L/qiushi-skill)
 - [yaklang/hack-skills](https://github.com/yaklang/hack-skills)
 - [mukul975/Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
+- [MDX-Tom/gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
 
 ## Contributing
 

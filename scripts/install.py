@@ -12,7 +12,7 @@ except ModuleNotFoundError as exc:
         file=sys.stderr,
     )
     raise SystemExit(1) from exc
-APP_NAME='codex-redteam-optin-mode'; APP_VERSION='1.1.7'
+APP_NAME='codex-redteam-optin-mode'; APP_VERSION='1.3.0'
 AGENTS_BLOCK_START='<!-- codex-redteam-optin-mode:start -->'; AGENTS_BLOCK_END='<!-- codex-redteam-optin-mode:end -->'
 SESSION_STATUS='Loading session mode context'; PROMPT_STATUS='Checking mode-gated offensive routing'
 _MISSING=object()
@@ -221,14 +221,23 @@ def seed_prompt_files(repo_root:Path,codex_home:Path,dry_run:bool)->None:
         if dry_run: continue
         dst.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(src,dst)
 def _powershell_literal(value:str)->str: return "'" + value.replace("'","''") + "'"
-def build_windows_hook_command(python_cmd:str,script_path:Path)->str:
+def resolve_powershell_command()->str:
+    for name in ('powershell.exe','pwsh.exe','pwsh','powershell'):
+        resolved=shutil.which(name)
+        if resolved: return resolved
+    system_root=os.environ.get('SystemRoot','').strip()
+    if system_root:
+        legacy=Path(system_root)/'System32'/'WindowsPowerShell'/'v1.0'/'powershell.exe'
+        if legacy.is_file(): return str(legacy)
+    return 'powershell.exe'
+def build_windows_hook_command(python_cmd:str,script_path:Path,powershell_cmd:str|None=None)->str:
     script=(
         "$ErrorActionPreference='Stop';"
         f"& {_powershell_literal(python_cmd)} '-B' {_powershell_literal(str(script_path))};"
         "exit $LASTEXITCODE"
     )
     encoded=base64.b64encode(script.encode('utf-16le')).decode('ascii')
-    return subprocess.list2cmdline(['powershell.exe','-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',encoded])
+    return subprocess.list2cmdline([powershell_cmd or resolve_powershell_command(),'-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',encoded])
 def build_hooks_payload(repo_root:Path,codex_home:Path)->dict:
     src=repo_root/'templates'/'hooks.json.template'; python_cmd=str(Path(sys.executable).resolve(strict=False)); hooks_dir=codex_home/'hooks'
     commands={

@@ -4,6 +4,36 @@ All notable changes to the Codex Red Team Opt-In Mode project.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [1.3.0] - 2026-07-14
+
+### Added
+
+- Added a managed GPT-5.4 jailbreak profile and the `gpt-5.4*` automatic model-profile mapping.
+- Added normalized-content integrity coverage for the imported GPT-5.4 CTF Core Contract.
+- Extended installer validation, deployment, uninstall, and model-selection regression coverage to GPT-5.4.
+
+## [1.2.0] - 2026-07-14
+
+### Added
+
+- Added model-aware prompt profiles for GPT-5.6, GPT-5.5, and a generic fallback, selected from hook payload, transcript `turn_context`, environment, or Codex config.
+- Added automatic prompt-profile reinjection when the active model changes and persisted the active model/profile in session state.
+- Added a dedicated `jailbreak -> llm-prompt-injection -> redteam-jailbreak-detail-pack -> llm-prompt-injection` route.
+- Added installer validation and regression coverage for profile selection, transcript discovery, live model switching, prompt deployment, and uninstall cleanup.
+
+### Changed
+
+- Integrated the GPT-5.6 unrestricted instruction as a managed model profile while keeping `instruction.ctf.md` as the canonical instruction file.
+- Expanded the installed domain-card set from 35 to 36 and documented model-profile customization.
+
+### Fixed
+
+- Active automation can now load explicitly configured `module:function` adapters into the Hook controller's Executor.
+- CVE candidates and automation artifacts now persist across controller turns instead of being dropped between state and memory representations.
+- Windows hook commands now resolve an available PowerShell executable, including `pwsh`, and Python dependencies are version-pinned for reproducible installs and tests.
+
 ## [1.1.7] - 2026-07-11
 
 ### Fixed
@@ -157,6 +187,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Managed incremental installer for Python and PowerShell.
 - Reference method layer and technology routing layer from three external skill repositories.
 
+[1.3.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.3.0
+[1.2.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.2.0
 [1.1.7]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.1.7
 [1.0.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.0.0
 [0.6.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v0.6.0
