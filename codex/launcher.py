@@ -5,6 +5,7 @@ import json
 from fnmatch import fnmatchcase
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
@@ -188,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     environment["CODEX_REDTEAM_PINNED_MODEL"] = model
     environment["CODEX_REDTEAM_PINNED_PROFILE"] = pattern
     environment["CODEX_REDTEAM_PINNED_PROFILE_FILE"] = profile_path.name
+    command = build_codex_command(args, session_path, executable)
+    rendered_command = subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
     print(
         "提示：本启动器已加载单一 system profile。\n"
         f"启动模型：{model}\n锁定模型族：{pattern}\nProfile 文件：{profile_path.name}\n"
@@ -196,11 +199,13 @@ def main(argv: list[str] | None = None) -> int:
         "Notice: This launcher loaded a single system profile.\n"
         f"Launch model: {model}\nLocked model family: {pattern}\nProfile file: {profile_path.name}\n"
         "Variants in the same model family remain compatible. Switching to another model family "
-        "will not update the system instructions, and the next user prompt will be blocked.",
+        "will not update the system instructions, and the next user prompt will be blocked.\n\n"
+        "Codex 启动命令 / Codex launch command:\n"
+        f"{rendered_command}",
         file=sys.stderr,
     )
     try:
-        return subprocess.run(build_codex_command(args, session_path, executable), env=environment).returncode
+        return subprocess.run(command, env=environment).returncode
     finally:
         session_path.unlink(missing_ok=True)
 

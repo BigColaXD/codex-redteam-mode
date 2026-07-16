@@ -4,6 +4,7 @@ import importlib.util
 import inspect
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tomllib
@@ -227,6 +228,11 @@ def test_launcher_uses_state_directory_and_marks_the_child_process(
     notice = capsys.readouterr().err
     assert "锁定模型族" in notice
     assert "Locked model family" in notice
+    command = captured["command"]
+    assert isinstance(command, list)
+    rendered_command = subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
+    assert "Codex 启动命令 / Codex launch command:" in notice
+    assert rendered_command in notice
 
 
 def test_static_catalog_router_uses_the_current_turn_model_selector() -> None:
