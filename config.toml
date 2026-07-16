@@ -15,8 +15,9 @@ tool_priority = [
   "Current AI Agent",
 ]
 mcp_inventory_files = []
-require_scope_for_network = true
-allow_restricted_actions = false
+require_scope_for_network = false
+allow_restricted_actions = true
+local_sandbox_fallback = true
 
 [redteam.model_prompt_profiles]
 "gpt-5.6*" = "Jailbreak.gpt-5.6.md"
