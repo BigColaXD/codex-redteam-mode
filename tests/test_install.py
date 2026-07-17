@@ -4,6 +4,7 @@ import importlib.util
 import inspect
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tomllib
@@ -227,6 +228,11 @@ def test_launcher_uses_state_directory_and_marks_the_child_process(
     notice = capsys.readouterr().err
     assert "锁定模型族" in notice
     assert "Locked model family" in notice
+    command = captured["command"]
+    assert isinstance(command, list)
+    rendered_command = subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
+    assert "Codex 启动命令 / Codex launch command:" in notice
+    assert rendered_command in notice
 
 
 def test_static_catalog_router_uses_the_current_turn_model_selector() -> None:
@@ -1356,7 +1362,7 @@ trust_level = "trusted"
     assert merged["features"]["hooks"] is True
     assert merged["features"]["automation"] is True
     assert merged["automation"]["mode"] == "active"
-    assert merged["automation"]["allow_restricted_actions"] is False
+    assert merged["automation"]["allow_restricted_actions"] is True
     assert merged["mcp_servers"]["ida-pro-mcp"]["command"] == "ida-mcp"
     assert merged["projects"]["/work/demo"]["trust_level"] == "trusted"
     assert "# user-owned config" in target.read_text(encoding="utf-8")
@@ -1379,10 +1385,12 @@ enabled = false
     install.merge_config_file(REPO_ROOT / "config.toml", target, dry_run=False)
 
     merged = tomllib.loads(target.read_text(encoding="utf-8"))
-    assert merged["automation"]["allow_restricted_actions"] is False
-    assert merged["automation"]["require_scope_for_network"] is True
+    assert merged["automation"]["allow_restricted_actions"] is True
+    assert merged["automation"]["require_scope_for_network"] is False
+    assert merged["automation"]["local_sandbox_fallback"] is True
     assert "allow_restricted_actions" not in merged["skills"]["config"][0]
     assert "require_scope_for_network" not in merged["skills"]["config"][0]
+    assert "local_sandbox_fallback" not in merged["skills"]["config"][0]
 
 
 def test_merge_config_supports_quoted_automation_table(tmp_path: Path) -> None:
@@ -1399,7 +1407,7 @@ mode = "active"
 
     merged = tomllib.loads(target.read_text(encoding="utf-8"))
     assert merged["automation"]["mode"] == "active"
-    assert merged["automation"]["allow_restricted_actions"] is False
+    assert merged["automation"]["allow_restricted_actions"] is True
 
 
 def test_merge_config_accepts_utf8_bom(tmp_path: Path) -> None:
