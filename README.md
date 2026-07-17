@@ -8,6 +8,43 @@
 
 A lightweight, evidence-driven red team runtime/configuration layer for Codex. In normal mode, the base `instruction.ctf.md` profile remains active while additional prepoison context, structured `phase -> router -> pack -> leaf` routing, and the automation loop stay off. Explicitly enabling red-team mode activates those additional runtime layers.
 
+## Usage Instructions
+
+Before using this project, you should read the [README](./README_ZH.md) file completely to prevent any issues during use.
+
+### About Model Security Review
+
+1. For `GPT-5.4`, this model does not have `trusted network access`, so you can directly use this project for penetration testing.
+2. For `GPT-5.5` and `GPT-5.6`, there are `other models` on the cloud that monitor the model's output, and if the output violates rules, it will `ban this session`. Therefore, to ensure smooth usage, please make sure: `your ChatGPT account has passed trusted network access`, `use GPT-5.4`, `use Claude-Opus-4-6`, or `use other models without security review`.
+
+### Asking Questions Wisely
+
+1. If you have questions about the content in the **README**, you should submit an **ISSUE**, including the corresponding content from the **README** to seek help, or ask in the **WeChat group** in the same way.
+
+   Do:
+   ```text
+   [Paste the text from the README], I have a question here, how/why/what should I do
+   ```
+   Don't:
+   ```text
+   Why is it different when I open it compared to the video?
+   ```
+
+2. If you have suggestions or ideas for maintaining the project, you can `submit an ISSUE`, `submit a Pull Request`, or `suggest in the WeChat group`.
+
+   Do:
+   ```text
+   I have a suggestion regarding xxx [image], here we can modify/add/delete xxx
+   ```
+   Don't:
+   ```text
+   Can we add a plugin/feature for cracking keys?
+   ```
+
+### Disclaimer
+
+This project is **only for authorized penetration testing, red team research, and defensive security experiments**. Users must obtain proper authorization before testing any systems they don't own. The author assumes no responsibility for unauthorized or illegal use.
+
 ## Why This Project
 
 Two common pitfalls in AI-assisted security work:
@@ -302,10 +339,6 @@ Validation covers:
 - Real execution requires explicitly registered scoped adapters; missing tools, scope, or adapters are blocked or pivoted instead of being treated as successful execution
 - Red-team mode must be explicitly enabled per session
 - Semantic phase detection is a fallback — rule-first matching is more reliable for well-defined task types
-
-## Disclaimer
-
-This project is intended **solely for authorized penetration testing, red team research, and defensive security experiments**. Users must obtain proper authorization before testing any system they do not own. The authors disclaim all liability for unauthorized or illegal use.
 
 ## Contributions & Acknowledgements
 
