@@ -233,6 +233,10 @@ scripts/             transactional installer and validator
 tests/               runtime, adversarial, Hook, and install tests
 ```
 
+## Disclaimer
+
+This project is intended **solely for authorized penetration testing, red team research, and defensive security experiments**. Users must obtain proper authorization before testing any system they do not own. The authors disclaim all liability for unauthorized or illegal use.
+
 ## Contributions & Acknowledgements
 
 ### Individual Contributors
