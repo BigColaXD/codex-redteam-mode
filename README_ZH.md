@@ -1,14 +1,16 @@
-# Codex 红队模式
+# Codex 红队 Opt-In 模式
 
 [English](./README.md)
 
-一个适配 Codex App 与 Codex CLI 的、显式开启的持久化红队执行运行时。
+**当前版本：v2.0.0**
 
-项目会把用户目标编译为带目标级成功准则的类型化 `GoalContract`，通过真实 MCP 工具执行单领域、跨领域或多目标批次 `WorkflowSpec`，保存证据图，支持中断恢复，并且只在 `TerminalJudge` 证明全部准则后进入完成状态。
+> 默认保持 normal 模式；只有显式开启红队模式后，才启动持久化操作运行时。系统层基础指令与当前模型 profile 在所有模式下保持加载。
 
-## 核心重构
+一个面向 Codex App 与 Codex CLI 的、显式开启的持久化红队运行时。它把用户目标编译为带成功准则的 `GoalContract`，通过类型化 `WorkflowSpec` 和真实 MCP 工具执行任务，保存可验证证据，并只在 `TerminalJudge` 证明全部准则后进入成功终态。
 
-运行时已经移除 `phase -> router -> pack -> leaf`、正则领域路由、Markdown ExitGate 和第二套 Automation 状态机。原 36 张领域卡被一张仅描述边界的卡替代：
+## 项目初衷
+
+Codex 能够调用多种安全工具，但长流程容易受到会话中断、工具差异、结果搬运和“工具返回成功即任务完成”等问题影响。本项目将目标、动作、证据、恢复和终态判定统一到一条持久化执行主线中：
 
 ```text
 GoalContract
@@ -20,223 +22,166 @@ GoalContract
   -> TerminalJudge
 ```
 
-## 主要能力
+v2.0.0 已移除旧 `phase -> router -> pack -> leaf` 路由、正则领域路由、Markdown ExitGate 和第二套 Automation 状态机。领域名称只作为资产与技术标签，不再控制运行时分支。
 
-- **显式开启**：默认始终为 normal 模式。
-- **系统层提示词**：通过 `model_instructions_file` 加载基础指令和对应模型 profile。
-- **类型化工作流**：八个 TOML 工作流覆盖 Web/API、外网面、源码、二进制/移动端、身份/云、对抗模拟、模型安全和通用自适应任务。
-- **真实 MCP 发现**：支持 stdio 与 Streamable HTTP，通过 `initialize` 和 `tools/list` 获取工具。
-- **互补工具集成**：发现阶段可有界调用多个能力互补的 MCP；验证阶段保持单路径优先。
-- **持久执行**：SQLite WAL、事件、租约、幂等结果和证据能够跨会话恢复。
-- **无需用户搬运结果**：仅在 App 当前 Agent 独占某工具时，由 Agent 自动调用并通过 `redteam_run.observation/observations` 回传。
-- **语义证据**：用户文字、文件名、报告文字和工具 success 字段不等于漏洞证明。
-- **严格终态**：必需动作、目标覆盖、证据血缘、复现、影响、覆盖检查、回滚和报告必须全部通过。
-- **批次自治**：多目标任务拥有独立工作流和 run ID，同时支持统一恢复、Host 回灌、终态和取消。
+## 核心特性
+
+- **显式开启**：默认始终为 `normal`，红队 operation 仅在收到模式命令后启动。
+- **类型化执行**：八套版本化 TOML 工作流覆盖 Web/API、外网面、源码、二进制/移动端、身份/云、对抗模拟、模型安全和通用自适应任务。
+- **真实工具协作**：通过 stdio 或 Streamable HTTP 发现 MCP 工具；Host 独占能力可按 output contract 自动执行并回灌，无需用户搬运结果。
+- **持久化与批次自治**：SQLite WAL、事件、租约、幂等键和独立 run ID 支持中断恢复、并发保护、多目标批次和取消清理。
+- **证据驱动终态**：只有经过语义验证且具备目标绑定、父证据血缘、复现、影响、覆盖和回滚证明的结果，才能满足 `TerminalJudge`。
 
 ## 安装
 
+### 安装命令
+
+在仓库根目录安装依赖，然后安装到当前用户的 Codex Home：
+
 ```bash
 python -m pip install -r requirements.txt
-python scripts/install.py --model gpt-5.6-sol
+python scripts/install.py
 ```
+
+安装器会自动从环境变量、目标配置或已有 manifest 识别模型；通常无需传入 `--model`。
 
 项目级安装：
 
 ```bash
-python scripts/install.py --project-home PATH --model gpt-5.6-sol
+python scripts/install.py --project-home PATH
 ```
 
-自定义 Skill 目录：
+自定义 Skill 与持久化 operation 目录：
 
 ```bash
-python scripts/install.py --project-home PATH --agents-home AGENTS_PATH --enable-custom-skill-dirs --model gpt-5.6-sol
+python scripts/install.py --project-home PATH --agents-home AGENTS_PATH --enable-custom-skill-dirs --log-root OPERATION_PATH
 ```
 
-自定义持久 operation 目录：
+### 选项
+
+| 参数 | 说明 |
+|---|---|
+| `--codex-home PATH` | 安装到指定 Codex Home/profile；其 `AGENTS.md` 作为全局指导文件 |
+| `--project-home PATH` | 安装到 `PATH/.codex` 和 `PATH/.agents`，并管理项目根目录的 `AGENTS.md`；不可与 `--codex-home` 同时使用 |
+| `--agents-home PATH` | 指定 Skill 安装目录；自定义目录建议同时使用 `--enable-custom-skill-dirs` |
+| `--enable-custom-skill-dirs` | 让运行时优先使用 manifest 记录的自定义 Skill 目录 |
+| `--log-root PATH` | 指定 SQLite、事件和证据产物的持久化根目录 |
+| `--model MODEL` | 可选：覆盖自动检测结果，显式指定安装时使用的系统层模型 profile |
+| `--dry-run` | 只预览安装、升级或卸载操作，不写入文件 |
+| `--uninstall` | 删除 manifest 管理的文件、Hook、配置值和 `AGENTS.md` 区块 |
 
 ```bash
-python scripts/install.py --project-home PATH --log-root OPERATION_PATH --model gpt-5.6-sol
+# 先预览项目级安装
+python scripts/install.py --project-home PATH --dry-run
+
+# 卸载用户级安装
+python scripts/install.py --uninstall
+
+# 卸载项目级安装
+python scripts/install.py --project-home PATH --uninstall
 ```
 
-安装器会先部署候选版本并进行操作级验证，成功后才提交 manifest；失败时保留事务状态用于恢复和清理。
+### 运行时状态位置
 
-## 配置写入
+默认 operation 根目录为：
 
-安装器保留用户已有配置，并管理以下字段：
-
-```toml
-model_instructions_file = './redteam-mode/system-instructions.md'
-
-[features]
-hooks = true
-automation = true
-
-[automation]
-mode = "active"
-max_actions_per_cycle = 16
-action_timeout_seconds = 60
-max_retries_per_action = 2
-max_domains = 7
-max_hypothesis_branches = 4
-persist_run_state = true
-
-# 可选：为名称/描述不透明的外部 MCP 显式声明能力
-# [automation.tool_capabilities]
-# "server:tool" = ["page_fetch", "controlled_validation"]
-
-[mcp_servers.codex-redteam-runtime]
-command = "PYTHON_EXECUTABLE"
-args = ["-m", "runtime.mcp_server", "--root", "OPERATIONS_ROOT"]
-enabled = true
-
-[mcp_servers.codex-redteam-runtime.env]
-PYTHONPATH = "CODEX_HOME"
-CODEX_HOME = "CODEX_HOME"
+```text
+$CODEX_HOME/redteam-mode/operations/
+├── runtime.sqlite3
+└── artifacts/<run-id>/*.json
 ```
 
-安装器不会写入 `preauthorized_targets`。
+Hook 会话状态保存在 `$CODEX_HOME/redteam-mode/state/sessions`。可通过 `--log-root OPERATION_PATH` 更改 operation 数据位置。普通状态响应最多内联 64 KiB 证据；更大的已验证 payload 通过 `redteam_evidence` 按需读取，单个证据上限为 4 MiB。
 
-## App 使用流程
+升级和卸载不会主动删除运行时 session、memory 与 operation 数据，便于恢复、审计或手工清理。
 
-1. 安装后重启 Codex App。
+### 安装器做了什么
+
+- 保留已有用户配置，并只管理安装器写入的字段和文件。
+- 合并 `config.toml`、Hook、系统层模型 profile catalog、Runtime MCP server、工作流和唯一边界 Skill。
+- 使用 pending transaction 部署候选版本，完成运行时验证后才原子提交 manifest。
+- 升级时清理旧版受管路径，并对越界路径、无效 manifest、TOML 或 Hook 配置执行预检。
+- 卸载时只移除未被用户修改的受管内容，保留用户自定义配置、提示词、Hook 和 `AGENTS.md` 内容。
+
+## 快速开始
+
+1. 完成安装并重启 Codex App，或重新启动 Codex CLI。
 2. 新建任务，单独输入 `/redteam on`、`/redteam light` 或 `/redteam full`。
-3. 输入完整操作目标。
-4. Hook 将目标编译成 GoalContract，保留跨领域提示或将多目标分配到独立 operation。
-5. `redteam_run` 自动调用可用 MCP 工具；发现阶段最多组合三个互补工具结果。
-6. 如果某能力只存在于当前 App Agent，系统上下文会给出 phase/trigger/feedback gate/exit condition/output contract，由 Agent 直接执行并回灌。
-7. Runtime 每次转换都会把 run ID、待执行动作、artifact 和终态同步到 Hook 会话状态，新会话恢复不需要用户复制结果。
-8. TerminalJudge 仅在每个目标/领域准则都有复现、影响、覆盖和清理血缘时返回成功报告。
+3. 输入完整目标；Hook 会把目标编译为 `GoalContract`，单目标和多目标分别进入独立 operation。
+4. `redteam_run` 自动启动或恢复运行，通过 `ToolBroker` 调用可用 MCP 工具。
+5. Host Agent 独占工具会收到 `next_action_spec`、gate、exit condition 和 output contract，并自动把 observation 回灌 Runtime。
+6. `TerminalJudge` 证明所有目标准则、证据血缘和清理状态后生成最终结果。
+7. 输入 `/redteam off`、`退出红队模式` 或 `关闭红队模式` 返回 normal 模式。
 
-新建 App 任务会重新加载 `model_instructions_file`。静态 system catalog 根据 Hook 提供的模型元数据选择对应 profile，不把 profile 注入用户提示词。
-
-## CLI 使用流程
-
-普通 CLI 会话使用同一套系统提示词、Hooks、MCP runtime 和模式命令。
-
-可选 wrapper 会锁定单个模型族 system profile：
+CLI 可选 wrapper 会为当前进程锁定一个模型族 profile：
 
 ```bash
 codex-redteam --model gpt-5.6-sol
 ```
 
-Wrapper 创建临时单 profile 系统指令文件，Codex 退出后自动删除；切换模型族需要重新启动 wrapper。
+切换模型族时需要新建 App 任务或重新启动 wrapper，以重新加载 `model_instructions_file`。
 
-## MCP 工具
+### 模式说明
 
-| 工具 | 用途 |
-|---|---|
-| `redteam_run` | 单一自主入口：启动/恢复单次或批次 operation，并接收 Host observations |
-| `redteam_start` | 编译并启动新 operation |
-| `redteam_resume` | 继续持久 operation |
-| `redteam_status` | 返回动作、证据和缺失谓词 |
-| `redteam_submit_observation` | 对 Host Agent 工具结果执行语义校验并回灌 |
-| `redteam_evidence` | 按 ID 获取 compact status 中省略的已验证 payload |
-| `redteam_cancel` | 取消单次或整个批次 operation，并持久化每条清理状态 |
-| `redteam_events` | 按游标返回追加式 operation 事件链 |
-
-Runtime 发现下游 MCP 时会排除自身，避免递归调用。
-
-## 工作流模型
-
-每个 `codex/workflows/*.toml` 声明：
-
-- 工作流 ID 与版本
-- 语义匹配标签
-- 类型化动作及依赖
-- 可替代工具能力
-- 期望 artifact 与 verifier
-- 风险、超时、重试和回滚动作
-- 工具策略、阶段、触发条件、反馈 gate 和退出条件
-- 终态谓词和必需 artifact
-
-领域只作为 ATT&CK/资产/技术标签，不再控制运行时分支。
-
-## 证据模型
-
-每个证据节点包含 operation/action ID、目标、工具、artifact 类型、语义校验器、原始结构化输出、SHA-256、父证据、置信度和时间戳。Evidence schema v2 允许不同工具产生内容相同但 provenance 独立的证据，并自动迁移旧数据库和 artifact 文件名。
-
-派生证据必须引用可信父节点；复现要求具体重放数据，影响要求已测量结果，覆盖报告要求负对照，清理证明要求验证回滚状态。
-
-## 持久化
-
-Operation 默认存储在 `$CODEX_HOME/redteam-mode/operations`，可通过安装器的 `--log-root` 指定其他目录。
-
-```text
-runtime.sqlite3
-artifacts/<run-id>/*.json
-```
-
-SQLite 使用 WAL 和显式 schema 版本。Operation lease 串行化调度器，Action lease 保护单次调用，确定性 idempotency key 防止恢复后重复产生副作用；工作流版本与指纹绑定会拒绝静默漂移。
-
-多目标 operation 使用绑定父会话、目标和目标文本的确定性 batch ID；相同父会话中的新目标不会混入旧批次。Runtime 与 App/CLI Hook 通过共享跨进程锁串行化完整状态更新，再原子替换 `$CODEX_HOME/redteam-mode/state/sessions` 中的会话文件。
-
-缺少目标的 Goal 会在执行前返回 `waiting_goal_input`。Goal、事件、结果和证据在持久化前递归脱敏，单个证据上限为 4 MiB；POSIX 下运行时目录和文件使用私有权限。
-
-Status 只内联不超过 64 KiB 的证据 payload；更大的节点保留元数据，并可通过 `redteam_evidence` 按需获取，避免常规 App/CLI 上下文膨胀。
-
-## 唯一边界卡
-
-只安装 `agents/skills/redteam-boundary-policy/SKILL.md`。它只约束证据真实性、目标/会话绑定、秘密处理、可回滚执行和工具 handoff。
-
-它不参与路由，也不参与 TerminalJudge。
+| 模式 | 默认 | 适用场景 |
+|---|---:|---|
+| `normal` | 是 | 普通编码、文档和研究任务；不启动红队 operation，也不注入 operation doctrine |
+| `redteam-light` | 否 | 通过 `/redteam on` 或 `/redteam light` 显式启动持久化 Goal/Workflow 执行 |
+| `redteam-full` | 否 | 显式完整模式标记；v2.0.0 与 light 共用同一 Runtime、证据规则和 TerminalJudge 终态门槛 |
 
 ## 验证
 
 ```bash
+# 安装测试依赖
 python -m pip install -r requirements-dev.txt
+
+# 完整测试套件
 python -m pytest -q
+
+# 快速验证当前目录下的安装内容
 python scripts/validate.py --codex-home .
 ```
 
-Validator 会实际启动 MCP server 自检并加载八个工作流。测试覆盖假终态、伪证拒绝、并发启动/恢复、可执行 Host Agent handoff、取消清理、秘密脱敏、工作流漂移、真实 stdio/HTTP MCP、事务安装、App/CLI Hook 和卸载保护。
+安装器和测试覆盖：
 
-## 卸载
+- 启动 Runtime MCP server 并加载全部八套工作流。
+- 验证配置合并、事务升级、App/CLI Hook、模型 profile 和卸载保护。
+- 验证并发启动与恢复、租约、幂等结果、批次取消和清理状态。
+- 拒绝伪终态、伪证据、错误目标绑定和缺少可信父节点的派生证据。
+- 验证真实 stdio/Streamable HTTP MCP、Host Agent handoff、秘密脱敏和工作流漂移保护。
 
-```bash
-python scripts/install.py --uninstall
-python scripts/install.py --project-home PATH --uninstall
-```
+GitHub Actions 使用 Python 3.11 在 Windows、Ubuntu 和 macOS 上运行完整测试。
 
-只删除 manifest 管理的文件和配置/Hook 字段；用户自行修改的配置、提示词、Hook 与 AGENTS 内容会保留。
+## 已知局限
 
-## 目录
-
-```text
-codex/runtime/       持久 operation 引擎与 MCP server
-codex/workflows/     类型化工作流
-codex/hooks/         App/CLI 生命周期桥接
-codex/prompts/       模型专用 system profile
-agents/skills/       唯一边界策略卡
-scripts/             事务安装器和 validator
-tests/               Runtime、对抗、Hook 与安装测试
-```
-
-## 免责声明
-
-本项目**仅用于授权的渗透测试、红队研究和防御性安全实验**。用户在对任何非自有系统进行测试前，必须获得适当授权。作者对未经授权或非法使用不承担任何责任。
+- 实际执行能力取决于当前可发现的 MCP 工具或 Host Agent 工具；缺少能力时 operation 会保留 pending handoff 或 deferred action。
+- 名称、描述和输入 schema 都不足以表达能力的 MCP 工具，需要在 `automation.tool_capabilities` 中显式声明。
+- `redteam-light` 与 `redteam-full` 在 v2.0.0 中共用执行引擎和终态规则，模式标签本身不会选择不同工作流。
+- 单个证据 payload 上限为 4 MiB；常规状态只内联 64 KiB，较大证据需要使用 `redteam_evidence` 获取。
+- 新任务会重置为 normal；切换模型族需要新建任务或重新启动 wrapper。
 
 ## 贡献与致谢
 
 ### 个人贡献者
 
-- **Mingxi / 洺熙** — 建议添加语义判断作为 phase 检测 fallback；提议去除 methodology 层并细分 skills 以提升 AI 行为智能度
-- **Nirvana** — 提出工作流优化方案及 overlay 安装启用
-- **PINGS** — 提供 prompt-chain 鲁棒性审查
+- **Mingxi / 洺熙** — 建议添加语义判断作为 phase 检测 fallback；提议移除 methodology 层并细分 Skills，以提升 Agent 行为质量。
+- **Nirvana** — 提出工作流优化方案及 overlay 安装支持。
+- **PINGS** — 提供 jailbreak 文本增强和 prompt-chain 鲁棒性改进。
 
 ### 参考项目
 
-方法层、路由层和 skill pack 结构借鉴自：
+早期路由/Skill 设计及当前越狱参考了：
 
 - [qiushi-skill](https://github.com/qiushi-L/qiushi-skill)
 - [yaklang/hack-skills](https://github.com/yaklang/hack-skills)
-- [mukul975/Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
-- [MDX-Tom/gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
+- [Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
+- [gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
+
 
 ## 贡献
 
-详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+贡献流程、代码规范和提交要求详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ## 许可证
 
 [MIT](./LICENSE)
-

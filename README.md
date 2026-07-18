@@ -1,14 +1,16 @@
-# Codex Red-Team Mode
+# Codex Red-Team Opt-In Mode
 
-[中文说明](./README_ZH.md)
+[中文](./README_ZH.md)
 
-An opt-in, durable red-team operation runtime for Codex App and Codex CLI.
+**Current version: v2.0.0**
 
-The project compiles a user objective into a typed `GoalContract` with objective-specific criteria, executes single-domain, cross-domain, or multi-target batch `WorkflowSpec` graphs through live MCP tools, stores an evidence graph, resumes after interruption, and reaches terminal state only when `TerminalJudge` proves every criterion.
+> Normal mode remains the default. The durable red-team operation runtime starts only after explicit activation, while the system-layer base instructions and active model profile remain loaded in every mode.
 
-## What Changed
+An opt-in, durable red-team runtime for Codex App and Codex CLI. It compiles each objective into a criteria-bearing `GoalContract`, executes typed `WorkflowSpec` graphs through live MCP tools, preserves verified evidence, and reaches successful terminal state only after `TerminalJudge` proves every criterion.
 
-The runtime no longer uses `phase -> router -> pack -> leaf`, regex domain routers, Markdown exit gates, or a second automation state machine. Thirty-six domain cards were replaced with one boundary-only skill:
+## Motivation
+
+Codex can use many security tools, but long-running workflows are vulnerable to session interruption, tool variance, manual result relay, and false completion based on a tool success flag. This project unifies objectives, actions, evidence, recovery, and terminal judgment in one durable execution path:
 
 ```text
 GoalContract
@@ -20,245 +22,166 @@ GoalContract
   -> TerminalJudge
 ```
 
-## Core Properties
+Version 2.0.0 removes the former `phase -> router -> pack -> leaf` runtime, regex domain routers, Markdown exit gates, and the second Automation state machine. Domain names now act only as asset and technique metadata rather than control-plane branches.
 
-- **Opt-in mode**: normal mode remains the default.
-- **System-layer profiles**: `model_instructions_file` loads the composed base and model-specific instructions.
-- **Typed workflows**: eight versioned TOML workflows cover web/API, external, source, binary/mobile, identity/cloud, adversary emulation, model security, and generic adaptive operations.
-- **Live MCP discovery**: stdio and Streamable HTTP servers are discovered through `initialize` and `tools/list`.
-- **Complementary tool use**: discovery actions can collect a bounded ensemble of independent MCP results while validation stays focused on one proven path.
-- **Durable execution**: SQLite WAL state, events, leases, idempotency results, and verified evidence survive process/session interruption.
-- **No user relay**: host-only tool output is submitted through `redteam_run.observation/observations`; users do not copy results between prompts.
-- **Semantic evidence**: user prose, filenames, report text, and tool success flags do not prove findings.
-- **Strict terminal state**: required actions, target coverage, evidence lineage, reproduction, impact, coverage, cleanup, and report predicates must pass.
-- **Batch autonomy**: multi-target goals retain independent workflows/run IDs with aggregate resume, Host handoff, terminal status, and cancellation.
+## Core Features
+
+- **Explicit activation**: `normal` is always the default, and red-team operations start only after a mode command.
+- **Typed execution**: eight versioned TOML workflows cover web/API, external assessment, source review, binary/mobile, identity/cloud, adversary emulation, model security, and generic adaptive operations.
+- **Live tool collaboration**: tools are discovered through stdio or Streamable HTTP MCP; Host-only capabilities execute against an output contract and submit observations without user relay.
+- **Durability and batch autonomy**: SQLite WAL, events, leases, idempotency keys, and independent run IDs support recovery, concurrency control, multi-target batches, and cancellation cleanup.
+- **Evidence-driven completion**: only semantically verified results with target binding, parent lineage, reproduction, impact, coverage, and rollback proof can satisfy `TerminalJudge`.
 
 ## Installation
 
-Install dependencies:
+### Install Commands
+
+From the repository root, install dependencies and deploy to the current user Codex Home:
 
 ```bash
 python -m pip install -r requirements.txt
+python scripts/install.py
 ```
 
-Install into the user Codex home:
+The installer detects the model from the environment, target config, or existing manifest; `--model` is normally unnecessary.
+
+Project-local installation:
 
 ```bash
-python scripts/install.py --model gpt-5.6-sol
+python scripts/install.py --project-home PATH
 ```
 
-Install into a project-local Codex profile:
+Custom Skill and durable operation roots:
 
 ```bash
-python scripts/install.py --project-home PATH --model gpt-5.6-sol
+python scripts/install.py --project-home PATH --agents-home AGENTS_PATH --enable-custom-skill-dirs --log-root OPERATION_PATH
 ```
 
-Optional custom skill root:
+### Options
+
+| Option | Description |
+|---|---|
+| `--codex-home PATH` | Install into a specific Codex Home/profile; its `AGENTS.md` provides global guidance |
+| `--project-home PATH` | Install under `PATH/.codex` and `PATH/.agents`, and manage the project-root `AGENTS.md`; mutually exclusive with `--codex-home` |
+| `--agents-home PATH` | Select the Skill destination; custom roots should also use `--enable-custom-skill-dirs` |
+| `--enable-custom-skill-dirs` | Prefer the manifest-recorded custom Skill directory at runtime |
+| `--log-root PATH` | Select the durable root for SQLite state, events, and evidence artifacts |
+| `--model MODEL` | Optional: override automatic detection and explicitly select the installation-time system profile |
+| `--dry-run` | Preview installation, upgrade, or uninstall actions without writing files |
+| `--uninstall` | Remove manifest-managed files, Hooks, config values, and `AGENTS.md` blocks |
 
 ```bash
-python scripts/install.py --project-home PATH --agents-home AGENTS_PATH --enable-custom-skill-dirs --model gpt-5.6-sol
+# Preview a project-local installation
+python scripts/install.py --project-home PATH --dry-run
+
+# Uninstall a user-level deployment
+python scripts/install.py --uninstall
+
+# Uninstall a project-local deployment
+python scripts/install.py --project-home PATH --uninstall
 ```
 
-Optional durable operation root:
+### Runtime State Locations
 
-```bash
-python scripts/install.py --project-home PATH --log-root OPERATION_PATH --model gpt-5.6-sol
+The default operation root is:
+
+```text
+$CODEX_HOME/redteam-mode/operations/
+├── runtime.sqlite3
+└── artifacts/<run-id>/*.json
 ```
 
-The installer performs a transactional deployment and operational validation before committing the manifest.
+Hook session state is stored under `$CODEX_HOME/redteam-mode/state/sessions`. Use `--log-root OPERATION_PATH` to relocate operation data. Status responses inline no more than 64 KiB of evidence; larger verified payloads are fetched with `redteam_evidence`, and each evidence payload is capped at 4 MiB.
 
-## Installed Configuration
+Upgrade and uninstall preserve runtime session, memory, and operation data for recovery, auditing, or manual cleanup.
 
-The installer preserves existing user config and manages these values:
+### What the Installer Does
 
-```toml
-model_instructions_file = './redteam-mode/system-instructions.md'
+- Preserves existing user configuration and manages only installer-owned fields and files.
+- Merges `config.toml`, Hooks, the system-layer model profile catalog, Runtime MCP server, workflows, and the single boundary Skill.
+- Deploys a candidate through a pending transaction and commits the manifest only after operational validation passes.
+- Preflights invalid manifests, TOML, Hook config, and out-of-scope managed paths before upgrade cleanup.
+- Removes only unchanged managed content during uninstall while preserving user-modified config, prompts, Hooks, and `AGENTS.md` content.
 
-[features]
-hooks = true
-automation = true
+## Quick Start
 
-[automation]
-mode = "active"
-max_actions_per_cycle = 16
-action_timeout_seconds = 60
-max_retries_per_action = 2
-max_domains = 7
-max_hypothesis_branches = 4
-persist_run_state = true
+1. Complete installation and restart Codex App or Codex CLI.
+2. Start a new task and submit `/redteam on`, `/redteam light`, or `/redteam full` as a standalone prompt.
+3. Submit the complete objective. The Hook compiles it into a `GoalContract`, with independent operations for single or multiple targets.
+4. `redteam_run` starts or resumes execution and uses `ToolBroker` to invoke available MCP tools.
+5. Host-only tools receive a `next_action_spec`, gate, exit condition, and output contract, then automatically submit their observation to the Runtime.
+6. `TerminalJudge` emits the final result after proving every target criterion, evidence lineage, and cleanup state.
+7. Submit `/redteam off` or `disable red team mode` to return to normal mode.
 
-# Optional capability declarations for opaque MCP tool metadata:
-# [automation.tool_capabilities]
-# "server:tool" = ["page_fetch", "controlled_validation"]
-
-[mcp_servers.codex-redteam-runtime]
-command = "PYTHON_EXECUTABLE"
-args = ["-m", "runtime.mcp_server", "--root", "OPERATIONS_ROOT"]
-enabled = true
-
-[mcp_servers.codex-redteam-runtime.env]
-PYTHONPATH = "CODEX_HOME"
-CODEX_HOME = "CODEX_HOME"
-```
-
-The installer does not add a `preauthorized_targets` setting.
-
-## App Workflow
-
-1. Install the project and restart Codex App.
-2. Start a task and submit `/redteam on`, `/redteam light`, or `/redteam full` as a standalone prompt.
-3. Submit the operation objective.
-4. The Hook compiles the objective, preserves cross-domain hints, or assigns each target to an independent operation.
-5. `redteam_run` consumes live MCP tools directly and can combine up to three complementary discovery results.
-6. If a capability exists only in the current App agent, the action contract exposes its phase, trigger, feedback gate, exit condition, and output schema for automatic Host execution and submission.
-7. Every runtime transition mirrors run IDs, pending actions, artifacts, and terminal outcome into Hook session state for automatic recovery.
-8. The final response is emitted only after every target/domain criterion has lineage-linked reproduction, impact, coverage, and cleanup proof.
-
-Starting a new App task reloads `model_instructions_file`. The static system catalog selects the profile from Hook model metadata. It supports model-family selection without writing user-layer prompt text.
-
-## CLI Workflow
-
-Ordinary CLI sessions use the same installed system prompt, Hooks, MCP runtime, and mode commands.
-
-The optional wrapper enforces one system profile for the process:
+The optional CLI wrapper pins one model-family profile for the current process:
 
 ```bash
 codex-redteam --model gpt-5.6-sol
 ```
 
-The wrapper builds a temporary single-profile system instructions file and deletes it after the Codex process exits. Switching to another model family requires a new wrapper process.
+Changing model families requires a new App task or wrapper process so that `model_instructions_file` is reloaded.
 
-## MCP Runtime Tools
+### Modes
 
-| Tool | Purpose |
-|---|---|
-| `redteam_run` | Autonomous single entrypoint for single/batch start, resume, and Host observations |
-| `redteam_start` | Compile and start a new durable operation |
-| `redteam_resume` | Continue an existing operation |
-| `redteam_status` | Return actions, evidence, and missing predicates |
-| `redteam_submit_observation` | Submit host-agent tool output through semantic verification |
-| `redteam_evidence` | Fetch one verified payload omitted from compact status output |
-| `redteam_cancel` | Cancel one operation or an entire batch and persist each cleanup status |
-| `redteam_events` | Return a cursor-paginated append-only event trace |
-
-The runtime excludes its own MCP server while discovering downstream tools, preventing recursive self-discovery.
-
-## Workflow Model
-
-Each `codex/workflows/*.toml` file declares:
-
-- workflow ID and version
-- semantic match tags
-- typed actions and dependencies
-- alternative required capabilities
-- expected artifact and verifier
-- risk, timeout, retries, and optional rollback action
-- tool strategy plus explicit phase, trigger, feedback gate, and exit condition
-- terminal predicates and required artifacts
-
-Domain names are metadata, not control-plane branches.
-
-## Evidence Model
-
-Every verified node contains:
-
-- operation and action IDs
-- target and tool identity
-- artifact type and semantic verifier
-- raw structured payload
-- SHA-256 content hash
-- parent evidence IDs
-- confidence and timestamp
-
-Derived evidence requires verified parents. Reproduction requires concrete replay data, impact requires measured outcomes, coverage requires negative controls, and cleanup requires verified rollback state. Evidence schema v2 preserves independent provenance when multiple tools return identical content and migrates legacy database/artifact layouts.
-
-## Persistence
-
-Operation state is stored below the configured operation root (default: `$CODEX_HOME/redteam-mode/operations`):
-
-```text
-runtime.sqlite3
-artifacts/<run-id>/*.json
-```
-
-SQLite uses WAL mode and explicit schema metadata. An operation lease serializes schedulers, action leases protect individual calls, and deterministic idempotency keys prevent replay after recovery. Workflow version/fingerprint binding rejects silent definition drift.
-
-Multi-target operations use a deterministic batch ID bound to parent session, objective, and targets, preventing a later goal in the same task from joining an older batch. A shared cross-process lock serializes Runtime and App/CLI Hook session-state updates before atomic replacement.
-
-Goals without a target return `waiting_goal_input` before any action runs. Goal, event, result, and evidence payloads are recursively redacted before persistence; evidence is capped at 4 MiB. On POSIX, runtime directories and files are created with private permissions.
-
-Status responses inline evidence payloads up to 64 KiB. Larger verified nodes retain metadata and can be fetched on demand with `redteam_evidence`, keeping normal App/CLI context compact.
-
-## Single Boundary Skill
-
-Only `agents/skills/redteam-boundary-policy/SKILL.md` is installed. It defines evidence integrity, target/session binding, secret handling, reversibility, and tool-handoff rules.
-
-It does not route tasks and never participates in terminal predicates.
+| Mode | Default | Typical Use |
+|---|---:|---|
+| `normal` | Yes | Ordinary coding, documentation, and research; no red-team operation or operation doctrine is started |
+| `redteam-light` | No | Explicit durable Goal/Workflow execution through `/redteam on` or `/redteam light` |
+| `redteam-full` | No | Explicit full-mode marker; in v2.0.0 it shares the same Runtime, evidence rules, and TerminalJudge gates as light mode |
 
 ## Validation
 
-Install development dependencies and run the complete suite:
-
 ```bash
+# Install test dependencies
 python -m pip install -r requirements-dev.txt
+
+# Run the complete test suite
 python -m pytest -q
+
+# Validate an installation rooted at the current directory
 python scripts/validate.py --codex-home .
 ```
 
-The validator performs an MCP server self-test and loads all eight workflows. Tests cover false terminal prevention, false evidence rejection, concurrent start/recovery, actionable Host Agent handoff, cancellation, secret redaction, workflow drift, live stdio/HTTP MCP transports, installer transactions, App/CLI hooks, and uninstall preservation.
+Installer and test coverage includes:
 
-## Uninstall
+- Starting the Runtime MCP server and loading all eight workflows.
+- Config merge, transactional upgrade, App/CLI Hooks, model profiles, and uninstall preservation.
+- Concurrent start/recovery, leases, idempotent results, batch cancellation, and cleanup status.
+- Rejection of false terminal states, false evidence, incorrect target binding, and derived evidence without trusted parents.
+- Live stdio/Streamable HTTP MCP, Host Agent handoff, secret redaction, and workflow drift protection.
 
-```bash
-python scripts/install.py --uninstall
-```
+GitHub Actions runs the full suite on Windows, Ubuntu, and macOS with Python 3.11.
 
-For project-local installs:
+## Known Limitations
 
-```bash
-python scripts/install.py --project-home PATH --uninstall
-```
+- Execution capability depends on the MCP or Host Agent tools currently available; missing capabilities remain as a pending handoff or deferred action.
+- MCP tools whose names, descriptions, and input schemas do not expose their capabilities require explicit `automation.tool_capabilities` entries.
+- `redteam-light` and `redteam-full` share the same engine and terminal rules in v2.0.0; the mode label does not select a separate workflow policy.
+- Each evidence payload is capped at 4 MiB, while normal status output inlines only 64 KiB; larger evidence must be fetched through `redteam_evidence`.
+- New tasks reset to normal mode, and changing model families requires a new task or wrapper process.
 
-Only manifest-owned files and managed config/Hook values are removed. User-modified config, prompts, Hooks, and AGENTS content are preserved.
-
-## Repository Layout
-
-```text
-codex/runtime/       durable operation engine and MCP server
-codex/workflows/     typed workflow specifications
-codex/hooks/         App/CLI lifecycle bridge
-codex/prompts/       model-specific system profiles
-agents/skills/       single boundary policy skill
-scripts/             transactional installer and validator
-tests/               runtime, adversarial, Hook, and install tests
-```
-
-## Disclaimer
-
-This project is intended **solely for authorized penetration testing, red team research, and defensive security experiments**. Users must obtain proper authorization before testing any system they do not own. The authors disclaim all liability for unauthorized or illegal use.
-
-## Contributions & Acknowledgements
+## Contributions and Acknowledgements
 
 ### Individual Contributors
 
-- **Mingxi / 洺熙** — suggested adding semantic judgment as fallback for phase detection; proposed removing methodology while subdividing skills for smarter AI behavior
-- **Nirvana** — proposed workflow optimization with overlay installation enablement
-- **PINGS** — offered prompt-chain robustness review
+- **Mingxi / 洺熙** — suggested semantic judgment as a phase-detection fallback and proposed removing the methodology layer while subdividing Skills to improve Agent behavior.
+- **Nirvana** — proposed workflow optimization and overlay installation support.
+- **PINGS** — contributed jailbreak text enhancements and prompt-chain robustness improvements.
 
 ### Reference Projects
 
-Method layer, routing layer, and skill pack structure draw inspiration from:
+The earlier routing/Skill design and current runtime research drew from:
 
 - [qiushi-skill](https://github.com/qiushi-L/qiushi-skill)
 - [yaklang/hack-skills](https://github.com/yaklang/hack-skills)
-- [mukul975/Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
-- [MDX-Tom/gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
+- [Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
+- [gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
+
 
 ## Contributing
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow, coding conventions, and submission requirements.
 
 ## License
 
 [MIT](./LICENSE)
-
