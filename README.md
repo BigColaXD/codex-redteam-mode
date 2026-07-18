@@ -233,11 +233,7 @@ scripts/             transactional installer and validator
 tests/               runtime, adversarial, Hook, and install tests
 ```
 
-## References
 
-The runtime design draws from Codex Skills/MCP guidance, PentestGPT task trees, CAI agent/tool patterns, MITRE CALDERA operations, Atomic Red Team actions, Cybench, and CyberSecEval capability/utility evaluation.
-
-The release acceptance criteria for model capability utilization, professional workflow quality, and start-to-goal automation are tracked in `CAPABILITY_ACCEPTANCE.md`.
 
 ## Acknowledgements
 Individual Contributors
