@@ -30,7 +30,7 @@ The goal of this project is to provide a lightweight, opt-in red-team runtime/co
 
 ## Security Notice
 
-This repository is intended for **authorized penetration testing, red-team research, and defensive security experimentation**. The GitHub version must remain:
+This repository is intended for **penetration testing, red-team research, and defensive security experimentation**. The GitHub version must remain:
 
 - **Generic** — no hardcoded targets, paths, or operational data
 - **Reproducible** — anyone should be able to install and validate with the same results

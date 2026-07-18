@@ -1,0 +1,91 @@
+[workflow]
+id = "model-security-assessment"
+version = 1
+name = "Model security assessment"
+description = "Run a prompt-bank assessment with provenance, reproducibility, utility, and false-refusal evaluation."
+match_tags = ["jailbreak", "prompt-injection", "prompt", "llm", "模型", "越狱", "提示词", "注入"]
+required_artifacts = ["model_surface", "hypothesis_queue", "reproduction_artifact", "impact_proof", "coverage_report", "cleanup_proof", "final_report"]
+
+[[actions]]
+id = "inventory-model"
+name = "Inventory model, hierarchy, and prompt surface"
+capabilities = ["model_probe", "prompt_evaluation", "target_intake"]
+expected_artifact = "model_surface"
+verifier = "surface_map"
+risk = "safe"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+parameters = { coverage_focus = ["model identity and configuration", "instruction hierarchy", "system/developer/user boundaries", "tool and retrieval channels", "prompt provenance"] }
+
+[[actions]]
+id = "build-model-hypotheses"
+name = "Build prompt-hierarchy hypotheses"
+capabilities = ["reasoning", "prompt_evaluation"]
+expected_artifact = "hypothesis_queue"
+verifier = "hypothesis_queue"
+depends_on = ["inventory-model"]
+risk = "safe"
+parameters = { prioritization = ["hierarchy boundary", "prompt injection channel", "capability regression", "false refusal", "cross-model reproducibility"] }
+
+[[actions]]
+id = "run-prompt-bank"
+name = "Run reproducible prompt-bank cases"
+capabilities = ["prompt_evaluation", "controlled_validation"]
+expected_artifact = "reproduction_artifact"
+verifier = "reproduction_artifact"
+depends_on = ["build-model-hypotheses"]
+risk = "safe"
+parameters = { validation_contract = ["pin model and system profile", "record exact prompt case", "run matched benign and boundary controls", "repeat for reproducibility", "separate capability from refusal metrics"] }
+
+[[actions]]
+id = "measure-model-impact"
+name = "Measure capability and false-refusal impact"
+capabilities = ["impact_analysis", "evaluation_analysis"]
+expected_artifact = "impact_proof"
+verifier = "impact_proof"
+depends_on = ["run-prompt-bank"]
+risk = "safe"
+
+[[actions]]
+id = "review-model-coverage"
+name = "Review prompt-bank coverage"
+capabilities = ["coverage_analysis", "evaluation_analysis"]
+expected_artifact = "coverage_report"
+verifier = "coverage_report"
+depends_on = ["measure-model-impact"]
+risk = "safe"
+
+[[actions]]
+id = "cleanup-model"
+name = "Remove temporary evaluation state"
+capabilities = ["cleanup", "rollback"]
+expected_artifact = "cleanup_proof"
+verifier = "cleanup_proof"
+depends_on = ["review-model-coverage"]
+risk = "safe"
+
+[[actions]]
+id = "report-model"
+name = "Build the model security report"
+capabilities = ["report_generation", "reasoning"]
+expected_artifact = "final_report"
+verifier = "final_report"
+depends_on = ["cleanup-model"]
+risk = "safe"
+
+[[terminal_predicates]]
+kind = "workflow_actions_complete"
+subject = "required"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "reproduction_artifact"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "impact_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "cleanup_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "final_report"

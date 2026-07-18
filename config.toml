@@ -6,7 +6,7 @@ hooks = true
 automation = true
 
 [automation]
-mode = "assisted"
+mode = "active"
 tool_priority = [
   "WebFetch",
   "Browser MCP",
@@ -14,17 +14,24 @@ tool_priority = [
   "JADX MCP",
   "Current AI Agent",
 ]
-mcp_inventory_files = []
-require_scope_for_network = false
-allow_restricted_actions = true
-local_sandbox_fallback = true
+max_actions_per_cycle = 16
+action_timeout_seconds = 60
+max_retries_per_action = 2
+max_domains = 7
+max_hypothesis_branches = 4
+persist_run_state = true
+
+[mcp_servers.codex-redteam-runtime]
+command = "python"
+args = ["-m", "runtime.mcp_server"]
+enabled = true
+
+[mcp_servers.codex-redteam-runtime.env]
+PYTHONPATH = "."
+CODEX_HOME = "."
 
 [redteam.model_prompt_profiles]
 "gpt-5.6*" = "Jailbreak.gpt-5.6.md"
 "gpt-5.5*" = "Jailbreak.gpt-5.5.md"
 "gpt-5.4*" = "Jailbreak.gpt-5.4.md"
 default = "Jailbreak.default.md"
-
-# Active adapters are explicit Python callables keyed by discovered tool name.
-# [automation.adapters]
-# "WebFetch" = "my_codex_adapters:web_fetch"

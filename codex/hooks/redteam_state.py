@@ -3,114 +3,62 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 
 
 VALID_MODES = {"normal", "redteam-light", "redteam-full"}
 VALID_OPSEC = {"strict", "balanced"}
-VALID_EVIDENCE = {"unknown", "partial", "confirmed"}
-VALID_HEALTH = {"healthy", "strained", "degraded"}
-VALID_DRIFT = {"low", "medium", "high"}
 VALID_INTENTS = {"new", "continue", "revise", "verify", "summarize"}
-
-
-def _safe_int(val, default: int = 0) -> int:
-    """Convert value to int safely, returning default on failure."""
-    try:
-        return int(val or default)
-    except (ValueError, TypeError):
-        return default
-
-
-def _safe_float(val, default: float = 0.0) -> float:
-    """Convert value to float safely, returning default on failure."""
-    try:
-        return float(val or default)
-    except (ValueError, TypeError):
-        return default
 
 
 @dataclass
 class RedTeamState:
     mode: str = "normal"
-    phase: str = "general"
-    subphase: str = ""
-    method: str = ""
-    router: str = ""
-    skill_pack: str = ""
-    leaf_skill: str = ""
-    evidence_level: str = "unknown"
-    selected_path: str = ""
-    review_required: bool = False
     opsec_level: str = "balanced"
     objective: str = ""
     intent_type: str = "continue"
-    workflow_phase: str = "recon"
-    loop_iteration: int = 0
-    stagnation_count: int = 0
-    drift_score: float = 0.0
-    drift_level: str = "low"
-    current_task_id: str = ""
-    loop_health: str = "healthy"
-    active_skill_count: int = 0
-    pseudo_complete_count: int = 0
-    last_reason_code: str = ""
     last_changed: str = ""
     session_id: str = ""
-    pending_refusal_overlay: bool = False
-    last_refusal_turn_id: str = ""
-    evidence_artifacts: list = field(default_factory=list)
-    pivot_count: int = 0
-    # --- P3b: automation loop feedback fields ---
-    recent_artifacts: list = field(default_factory=list)
-    missing_capabilities: list = field(default_factory=list)
-    selected_tools: list = field(default_factory=list)
-    last_action: str = ""
-    last_reason: str = ""
+    pending_action: dict = field(default_factory=dict)
+    verified_artifacts: list = field(default_factory=list)
+    workflow_terminal: bool = False
     active_model: str = ""
     active_prompt_profile: str = ""
+    operation_run_id: str = ""
+    operation_run_ids: list = field(default_factory=list)
+    batch_session_id: str = ""
+    workflow_id: str = ""
+    operation_status: str = ""
+    next_action_id: str = ""
+    goal_terminal: bool = False
+    goal_success: bool = False
 
     def normalized(self) -> "RedTeamState":
         return RedTeamState(
             mode=self.mode if self.mode in VALID_MODES else "normal",
-            phase=self.phase or "general",
-            subphase=self.subphase or "",
-            method=self.method or "",
-            router=self.router or "",
-            skill_pack=self.skill_pack or "",
-            leaf_skill=self.leaf_skill or "",
-            evidence_level=self.evidence_level if self.evidence_level in VALID_EVIDENCE else "unknown",
-            selected_path=self.selected_path or "",
-            review_required=bool(self.review_required),
             opsec_level=self.opsec_level if self.opsec_level in VALID_OPSEC else "balanced",
             objective=self.objective or "",
             intent_type=self.intent_type if self.intent_type in VALID_INTENTS else "continue",
-            workflow_phase=self.workflow_phase or "recon",
-            loop_iteration=max(0, _safe_int(self.loop_iteration)),
-            stagnation_count=max(0, _safe_int(self.stagnation_count)),
-            drift_score=max(0.0, _safe_float(self.drift_score)),
-            drift_level=self.drift_level if self.drift_level in VALID_DRIFT else "low",
-            current_task_id=self.current_task_id or "",
-            loop_health=self.loop_health if self.loop_health in VALID_HEALTH else "healthy",
-            active_skill_count=max(0, _safe_int(self.active_skill_count)),
-            pseudo_complete_count=max(0, _safe_int(self.pseudo_complete_count)),
-            last_reason_code=self.last_reason_code or "",
             last_changed=self.last_changed or now_iso(),
             session_id=self.session_id or "",
-            pending_refusal_overlay=bool(self.pending_refusal_overlay),
-            last_refusal_turn_id=self.last_refusal_turn_id or "",
-            evidence_artifacts=list(self.evidence_artifacts) if isinstance(self.evidence_artifacts, list) else [],
-            pivot_count=max(0, _safe_int(self.pivot_count)),
-            # P3b: automation loop feedback
-            recent_artifacts=list(self.recent_artifacts) if isinstance(self.recent_artifacts, list) else [],
-            missing_capabilities=list(self.missing_capabilities) if isinstance(self.missing_capabilities, list) else [],
-            selected_tools=list(self.selected_tools) if isinstance(self.selected_tools, list) else [],
-            last_action=self.last_action or "",
-            last_reason=self.last_reason or "",
+            pending_action=dict(self.pending_action) if isinstance(self.pending_action, dict) else {},
+            verified_artifacts=list(self.verified_artifacts) if isinstance(self.verified_artifacts, list) else [],
+            workflow_terminal=bool(self.workflow_terminal),
             active_model=self.active_model or "",
             active_prompt_profile=self.active_prompt_profile or "",
+            operation_run_id=self.operation_run_id or "",
+            operation_run_ids=list(self.operation_run_ids) if isinstance(self.operation_run_ids, list) else [],
+            batch_session_id=self.batch_session_id or "",
+            workflow_id=self.workflow_id or "",
+            operation_status=self.operation_status or "",
+            next_action_id=self.next_action_id or "",
+            goal_terminal=bool(self.goal_terminal),
+            goal_success=bool(self.goal_success),
         )
 
 
@@ -153,6 +101,47 @@ def state_path(session_id: str) -> Path:
     return state_dir() / f"{_safe_session_key(session_id)}.json"
 
 
+@contextmanager
+def session_state_lock(session_id: str, *, timeout_seconds: float = 10.0) -> Iterator[None]:
+    target = state_path(session_id)
+    directory = target.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        directory.chmod(0o700)
+    lock_path = target.with_name(f"{target.name}.lock")
+    deadline = time.monotonic() + max(0.1, timeout_seconds)
+    while True:
+        try:
+            descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            try:
+                stale = time.time() - lock_path.stat().st_mtime > 30.0
+            except FileNotFoundError:
+                continue
+            if stale:
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"session_state_lock_timeout:{session_id}")
+            time.sleep(0.01)
+            continue
+        try:
+            os.write(descriptor, f"{os.getpid()}\n".encode("ascii"))
+        finally:
+            os.close(descriptor)
+        break
+    try:
+        yield
+    finally:
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def _coerce_state_payload(raw: dict) -> dict:
     valid_names = {item.name for item in fields(RedTeamState)}
     return {key: value for key, value in raw.items() if key in valid_names}
@@ -185,10 +174,16 @@ def save_state(state: RedTeamState, session_id: str | None = None) -> None:
     state.last_changed = now_iso()
     directory = state_dir()
     directory.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        directory.chmod(0o700)
     target = state_path(effective_session_id)
     tmp = target.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(asdict(state), ensure_ascii=False, indent=2), encoding="utf-8")
+    if os.name != "nt":
+        tmp.chmod(0o600)
     tmp.replace(target)
+    if os.name != "nt":
+        target.chmod(0o600)
 
 
 def reset_state(session_id: str | None = None) -> RedTeamState:

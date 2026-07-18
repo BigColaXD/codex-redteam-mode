@@ -13,9 +13,9 @@ except ModuleNotFoundError as exc:
         file=sys.stderr,
     )
     raise SystemExit(1) from exc
-APP_NAME='codex-redteam-optin-mode'; APP_VERSION='1.3.0'; PROMPT_OWNERSHIP_VERSION=1
+APP_NAME='codex-redteam-optin-mode'; APP_VERSION='2.0.0'; PROMPT_OWNERSHIP_VERSION=1
 AGENTS_BLOCK_START='<!-- codex-redteam-optin-mode:start -->'; AGENTS_BLOCK_END='<!-- codex-redteam-optin-mode:end -->'
-SESSION_STATUS='Loading session mode context'; PROMPT_STATUS='Checking mode-gated offensive routing'; STOP_STATUS='Recording refusal backstop state'
+SESSION_STATUS='Loading session mode context'; PROMPT_STATUS='Dispatching durable red-team workflow'; LEGACY_STOP_STATUS='Recording refusal backstop state'
 SYSTEM_INSTRUCTIONS_CONFIG_VALUE='./redteam-mode/system-instructions.md'
 SYSTEM_PROFILE_START='<!-- codex-redteam-system-profile:start -->'; SYSTEM_PROFILE_END='<!-- codex-redteam-system-profile:end -->'
 MODEL_CATALOG_START='<!-- codex-redteam-model-profiles:start -->'; MODEL_CATALOG_END='<!-- codex-redteam-model-profiles:end -->'
@@ -45,13 +45,10 @@ def resolve_install_homes(project_home:str|None,codex_home:str|None,agents_home:
     codex_home,agents_home,_=resolve_install_paths(project_home,codex_home,agents_home)
     return codex_home,agents_home
 def resolve_log_root(codex_home:Path,explicit:str|None)->Path:
-    return normalize_path(explicit) if explicit else normalize_path(codex_home/'logs'/'codex-redteam')
-def runtime_state_locations()->list[Path]:
-    locations=[]; configured=os.environ.get('CODEX_HOME','').strip()
-    if configured: locations.append(normalize_path(configured)/'redteam-mode'/'state')
-    default=normalize_path(Path.home()/'.codex'/'redteam-mode'/'state')
-    if default not in locations: locations.append(default)
-    return locations
+    return normalize_path(explicit) if explicit else normalize_path(codex_home/'redteam-mode'/'operations')
+def runtime_state_locations(codex_home:Path,operation_root:Path)->list[Path]:
+    root=normalize_path(codex_home)/'redteam-mode'
+    return [root/'state',normalize_path(operation_root)]
 def _is_within(path:Path,*roots:Path)->bool:
     resolved=path.resolve()
     return any(resolved == root.resolve() or str(resolved).startswith(str(root.resolve())+os.sep) for root in roots if root)
@@ -351,7 +348,7 @@ def apply_config_removal(plan:tuple[Path,str,str|None,bool],dry_run:bool)->None:
 def copy_tree(src:Path,dst:Path,dry_run:bool)->None:
     info(f'copy {src} -> {dst}')
     if dry_run: return
-    if dst.exists(): shutil.rmtree(dst)
+    if dst.exists(): raise ManifestValidationError(f'unmanaged destination already exists: {dst}')
     shutil.copytree(src,dst,ignore=shutil.ignore_patterns('__pycache__','*.pyc','*.pyo'))
 
 def copy_skill_md(src_dir:Path,dst_dir:Path,dry_run:bool)->None:
@@ -415,8 +412,6 @@ def build_hooks_payload(repo_root:Path,codex_home:Path)->dict:
         '{{SESSION_COMMAND_WINDOWS}}':build_windows_hook_command(python_cmd,hooks_dir/'session-start-context.py'),
         '{{PROMPT_COMMAND}}':shlex.join([python_cmd,'-B',str(hooks_dir/'hook-security-context-hook.py')]),
         '{{PROMPT_COMMAND_WINDOWS}}':build_windows_hook_command(python_cmd,hooks_dir/'hook-security-context-hook.py'),
-        '{{STOP_COMMAND}}':shlex.join([python_cmd,'-B',str(hooks_dir/'stop-refusal-hook.py')]),
-        '{{STOP_COMMAND_WINDOWS}}':build_windows_hook_command(python_cmd,hooks_dir/'stop-refusal-hook.py'),
     }
     rendered=src.read_text(encoding='utf-8-sig')
     for placeholder,command in commands.items(): rendered=rendered.replace(placeholder,json.dumps(command)[1:-1])
@@ -443,7 +438,7 @@ def remove_agents_block(agents_file:Path,dry_run:bool)->None:
     dst.write_text(updated+'\n', encoding='utf-8') if updated else dst.unlink()
 def is_managed_hook(hook:dict)->bool:
     command=str(hook.get('command','')); status=str(hook.get('statusMessage',''))
-    return 'session-start-context.py' in command or 'hook-security-context-hook.py' in command or 'stop-refusal-hook.py' in command or status in {SESSION_STATUS, PROMPT_STATUS, STOP_STATUS}
+    return 'session-start-context.py' in command or 'hook-security-context-hook.py' in command or 'stop-refusal-hook.py' in command or status in {SESSION_STATUS, PROMPT_STATUS, LEGACY_STOP_STATUS}
 def scrub_managed_hooks(payload:dict)->dict:
     hooks_root=payload.get('hooks',{}); cleaned={}
     for event, entries in hooks_root.items():
@@ -499,12 +494,12 @@ def run_validate(repo_root:Path,codex_home:Path,dry_run:bool,manifest_candidate:
     if manifest_candidate is not None: command.extend(['--manifest',str(manifest_candidate)])
     subprocess.run(command,check=True)
 def repo_skill_dirs(repo_root:Path)->list[Path]:
-    skills_root=repo_root/'agents'/'skills'; return sorted(path for path in skills_root.iterdir() if path.is_dir()) if skills_root.exists() else []
+    skills_root=repo_root/'agents'/'skills'; return sorted(path for path in skills_root.iterdir() if path.is_dir() and (path/'SKILL.md').is_file()) if skills_root.exists() else []
 def managed_targets(repo_root:Path,codex_home:Path,agents_home:Path)->list[Path]:
-    targets=[codex_home/'redteam-mode'/'system-instructions.md',codex_home/'redteam-mode'/'launcher.py',codex_home/'redteam-mode'/'codex-redteam.cmd',codex_home/'redteam-mode'/'codex-redteam',codex_home/'hooks'/'session-start-context.py',codex_home/'hooks'/'hook-security-context-hook.py',codex_home/'hooks'/'stop-refusal-hook.py',codex_home/'hooks'/'redteam_state.py',codex_home/'hooks'/'core',codex_home/'router',codex_home/'orchestrator',codex_home/'automation',codex_home/'session_patcher']
+    targets=[codex_home/'redteam-mode'/'system-instructions.md',codex_home/'redteam-mode'/'launcher.py',codex_home/'redteam-mode'/'codex-redteam.cmd',codex_home/'redteam-mode'/'codex-redteam',codex_home/'hooks'/'session-start-context.py',codex_home/'hooks'/'hook-security-context-hook.py',codex_home/'hooks'/'redteam_state.py',codex_home/'hooks'/'core',codex_home/'runtime',codex_home/'workflows']
     targets.extend(agents_home/'skills'/skill_dir.name for skill_dir in repo_skill_dirs(repo_root)); return targets
 def legacy_cleanup_targets(codex_home:Path,agents_home:Path)->list[Path]:
-    return [codex_home/'hooks'/'legacy-redteam-hook.py', agents_home/'skills'/'red-team-command-doctrine-old']
+    return [codex_home/'hooks'/'legacy-redteam-hook.py', codex_home/'session_patcher', agents_home/'skills'/'red-team-command-doctrine-old']
 def _unique_cleanup_targets(targets:list[Path],protected:set[str]|None=None)->list[Path]:
     protected=protected or set(); unique=[]; seen=set()
     for target in targets:
@@ -520,6 +515,18 @@ def preflight_cleanup_targets(targets:list[Path],operation:str)->None:
     for target in outside: print(f'  {target}',file=sys.stderr)
     print('Re-run with the original --agents-home value. No files were changed.',file=sys.stderr)
     raise SystemExit(2)
+def preflight_unmanaged_collisions(targets:list[Path],owned_targets:list[Path])->None:
+    owned={str(path.resolve(strict=False)).casefold() for path in owned_targets}
+    collisions=[
+        target for target in targets
+        if target.exists() and str(target.resolve(strict=False)).casefold() not in owned
+    ]
+    if not collisions: return
+    details='\n'.join(f'  {target}' for target in collisions)
+    raise ManifestValidationError(
+        'install targets collide with unmanaged files or directories; move them, choose another install root, '
+        f'or adopt them through a valid manifest before retrying:\n{details}'
+    )
 def _validated_absolute_paths(raw_paths:object,source:Path,label:str,field:str='managed_paths')->list[Path]:
     if not isinstance(raw_paths,list): raise ManifestValidationError(f'invalid {label} at {source}: {field} must be a JSON array')
     targets=[]
@@ -624,6 +631,7 @@ def write_manifest(codex_home:Path,agents_file:Path,agents_home:Path,targets:lis
     plan=prepare_manifest(codex_home,agents_file,agents_home,targets,log_root,custom_skill_dirs_enabled,dry_run,config_merge,system_prompt); commit_manifest(plan,dry_run)
 def prepare_upgrade_cleanup(codex_home:Path,agents_home:Path,agents_file:Path,default_targets:list[Path],pending_targets:list[Path]|None=None)->list[Path]:
     previous_targets=load_manifest_targets(codex_home); recorded_targets=_unique_cleanup_targets(previous_targets + list(pending_targets or [])); cleanup_targets=recorded_targets or default_targets; protected={str(agents_file), str(codex_home/'AGENTS.md'), str(codex_home/'hooks.json'), str(codex_home/'config.toml')}
+    if not recorded_targets: cleanup_targets=[]
     cleanup_targets=_unique_cleanup_targets(cleanup_targets + legacy_cleanup_targets(codex_home,agents_home),protected)
     preflight_cleanup_targets(cleanup_targets,'upgrade cleanup')
     return cleanup_targets
@@ -635,7 +643,7 @@ def uninstall(repo_root:Path,codex_home:Path,agents_home:Path,agents_file:Path,d
     manifest_data=load_manifest_data(codex_home); pending_data=load_transaction_data(codex_home); ownership_data=pending_data.get('candidate_manifest') if pending_data else manifest_data
     config_plan=prepare_config_removal(codex_home,ownership_data or manifest_data)
     hooks_plan=prepare_hooks_removal(codex_home)
-    recorded_targets=_unique_cleanup_targets(load_manifest_targets(codex_home) + transaction_targets(codex_home)); targets=_unique_cleanup_targets((recorded_targets or managed_targets(repo_root,codex_home,agents_home)) + legacy_cleanup_targets(codex_home,agents_home))
+    recorded_targets=_unique_cleanup_targets(load_manifest_targets(codex_home) + transaction_targets(codex_home)); targets=_unique_cleanup_targets(recorded_targets + (legacy_cleanup_targets(codex_home,agents_home) if recorded_targets else []))
     if config_plan[3]:
         rendered=config_plan[2] or ''
         referenced=_configured_instruction_path(tomlkit.parse(rendered) if rendered.strip() else tomlkit.document(),config_plan[0])
@@ -649,10 +657,14 @@ def uninstall(repo_root:Path,codex_home:Path,agents_home:Path,agents_file:Path,d
     if agents_file != codex_home/'AGENTS.md': remove_agents_block(codex_home/'AGENTS.md',dry_run)
     info(f'apply managed hook removal -> {hooks_plan[0]}'); apply_hooks_plan(hooks_plan,dry_run); remove_path(manifest_path(codex_home),dry_run); remove_transaction(codex_home,dry_run)
 def main()->None:
-    parser=argparse.ArgumentParser(description='Install codex-redteam-optin-mode into a Codex Home or project.'); parser.add_argument('--codex-home', help='Codex Home/profile directory. AGENTS.md here is global guidance; use --project-home for project AGENTS.md.'); parser.add_argument('--agents-home', help='Skill installation destination. For a custom runtime directory, also use --enable-custom-skill-dirs.'); parser.add_argument('--project-home', help='Project root. Installs Codex files under PATH/.codex, skills under PATH/.agents by default, and AGENTS.md at PATH/AGENTS.md.'); parser.add_argument('--log-root', help='Automation log root recorded in the install manifest.'); parser.add_argument('--model', help='Active model used to select the system-layer Jailbreak profile. Falls back to CODEX_MODEL, target config, previous manifest, then source config.'); parser.add_argument('--enable-custom-skill-dirs', action='store_true', help='Prioritize the manifest-recorded custom skill directory at runtime.'); parser.add_argument('--dry-run', action='store_true', help='Preview operations without writing files.'); parser.add_argument('--uninstall', action='store_true', help='Remove managed files, hooks, and AGENTS.md blocks.'); args=parser.parse_args()
+    parser=argparse.ArgumentParser(description='Install codex-redteam-optin-mode into a Codex Home or project.'); parser.add_argument('--codex-home', help='Codex Home/profile directory. AGENTS.md here is global guidance; use --project-home for project AGENTS.md.'); parser.add_argument('--agents-home', help='Skill installation destination. For a custom runtime directory, also use --enable-custom-skill-dirs.'); parser.add_argument('--project-home', help='Project root. Installs Codex files under PATH/.codex, skills under PATH/.agents by default, and AGENTS.md at PATH/AGENTS.md.'); parser.add_argument('--log-root', help='Durable operation root for SQLite state, events, and evidence artifacts.'); parser.add_argument('--model', help='Active model used to select the system-layer Jailbreak profile. Falls back to CODEX_MODEL, target config, previous manifest, then source config.'); parser.add_argument('--enable-custom-skill-dirs', action='store_true', help='Prioritize the manifest-recorded custom skill directory at runtime.'); parser.add_argument('--dry-run', action='store_true', help='Preview operations without writing files.'); parser.add_argument('--uninstall', action='store_true', help='Remove managed files, hooks, and AGENTS.md blocks.'); args=parser.parse_args()
     if args.project_home and args.codex_home: parser.error('--project-home cannot be combined with --codex-home')
     repo_root=Path(__file__).resolve().parents[1]; codex_home,agents_home,agents_file=resolve_install_paths(args.project_home,args.codex_home,args.agents_home)
     log_root=resolve_log_root(codex_home,args.log_root)
+    if args.uninstall and not args.log_root:
+        installed_manifest=load_manifest_data(codex_home)
+        recorded_log_root=installed_manifest.get('log_root') if installed_manifest else None
+        if isinstance(recorded_log_root,str) and recorded_log_root.strip(): log_root=normalize_path(recorded_log_root)
     _SAFE_ROOTS.extend([codex_home, agents_home, repo_root])
     if args.project_home: _SAFE_ROOTS.append(agents_file.parent)
     info(f'platform: {platform.system()}'); info(f'codex home: {codex_home}'); info(f'agents home: {agents_home}')
@@ -664,14 +676,24 @@ def main()->None:
     if args.uninstall:
         uninstall(repo_root,codex_home,agents_home,agents_file,args.dry_run)
         info('runtime session state and memory are preserved after uninstall; possible locations:')
-        for location in runtime_state_locations(): info(f'  {location}')
+        for location in runtime_state_locations(codex_home,log_root): info(f'  {location}')
         good('uninstall complete'); return
     info(f"preflight config merge {repo_root/'config.toml'} -> {codex_home/'config.toml'}")
     previous_manifest=load_manifest_data(codex_home); pending_data=load_transaction_data(codex_home); ownership_data=pending_data.get('candidate_manifest') if pending_data else previous_manifest
     user_reference=original_model_instructions_reference(codex_home,ownership_data or {}); system_model,system_model_source=resolve_install_model(repo_root,codex_home,args.model,ownership_data.get('system_prompt') if ownership_data else None)
-    config_plan=prepare_config_merge(repo_root/'config.toml', codex_home/'config.toml',ownership_data.get('config_merge') if ownership_data else None,{('model_instructions_file',):SYSTEM_INSTRUCTIONS_CONFIG_VALUE})
+    runtime_args=['-m','runtime.mcp_server','--root',str(log_root)]
+    forced_config_values={
+        ('model_instructions_file',):SYSTEM_INSTRUCTIONS_CONFIG_VALUE,
+        ('mcp_servers','codex-redteam-runtime','command'):sys.executable,
+        ('mcp_servers','codex-redteam-runtime','args'):runtime_args,
+        ('mcp_servers','codex-redteam-runtime','enabled'):True,
+        ('mcp_servers','codex-redteam-runtime','env','PYTHONPATH'):str(codex_home.resolve(strict=False)),
+        ('mcp_servers','codex-redteam-runtime','env','CODEX_HOME'):str(codex_home.resolve(strict=False)),
+    }
+    config_plan=prepare_config_merge(repo_root/'config.toml', codex_home/'config.toml',ownership_data.get('config_merge') if ownership_data else None,forced_config_values)
     hooks_plan=prepare_hooks_merge(repo_root,codex_home)
     pending_targets=transaction_targets(codex_home); previous_targets=_unique_cleanup_targets(load_manifest_targets(codex_home)+pending_targets)
+    preflight_unmanaged_collisions(current_targets,previous_targets)
     legacy_prompts=legacy_prompt_targets(repo_root,codex_home,previous_targets,previous_manifest)
     system_instructions,system_prompt=build_system_instructions(repo_root,codex_home,system_model,system_model_source,user_reference,_unique_cleanup_targets(previous_targets+legacy_prompts)); info(f"system prompt: model={system_model}; profile={system_prompt['profile']}; file={system_prompt['profile_file']}; user_base={user_reference or 'none'}")
     current_targets.extend(managed_prompt_targets(repo_root,codex_home,previous_targets))
@@ -686,13 +708,10 @@ def main()->None:
         write_system_instructions(codex_home/'redteam-mode'/'system-instructions.md',system_instructions,args.dry_run); copy_file(repo_root/'codex'/'launcher.py',codex_home/'redteam-mode'/'launcher.py',args.dry_run); write_launcher_scripts(codex_home,args.dry_run); info(f"merge {repo_root/'config.toml'} -> {codex_home/'config.toml'}"); apply_config_merge(config_plan,args.dry_run); seed_prompt_files(repo_root,codex_home,args.dry_run,legacy_prompts); upsert_agents_file(repo_root,agents_file,args.dry_run)
         copy_file(repo_root/'codex'/'hooks'/'session-start-context.py', codex_home/'hooks'/'session-start-context.py', args.dry_run)
         copy_file(repo_root/'codex'/'hooks'/'hook-security-context-hook.py', codex_home/'hooks'/'hook-security-context-hook.py', args.dry_run)
-        copy_file(repo_root/'codex'/'hooks'/'stop-refusal-hook.py', codex_home/'hooks'/'stop-refusal-hook.py', args.dry_run)
         copy_file(repo_root/'codex'/'hooks'/'redteam_state.py', codex_home/'hooks'/'redteam_state.py', args.dry_run)
         copy_tree(repo_root/'codex'/'hooks'/'core', codex_home/'hooks'/'core', args.dry_run)
-        copy_tree(repo_root/'codex'/'router', codex_home/'router', args.dry_run)
-        copy_tree(repo_root/'codex'/'orchestrator', codex_home/'orchestrator', args.dry_run)
-        copy_tree(repo_root/'codex'/'automation', codex_home/'automation', args.dry_run)
-        copy_tree(repo_root/'codex'/'session_patcher', codex_home/'session_patcher', args.dry_run)
+        copy_tree(repo_root/'codex'/'runtime', codex_home/'runtime', args.dry_run)
+        copy_tree(repo_root/'codex'/'workflows', codex_home/'workflows', args.dry_run)
         for skill_dir in repo_skill_dirs(repo_root): copy_skill_md(skill_dir, agents_home/'skills'/skill_dir.name, args.dry_run)
         info(f'apply hooks merge -> {hooks_plan[0]}'); apply_hooks_plan(hooks_plan,args.dry_run)
         deployed=True; update_transaction(codex_home,'deployed',dry_run=args.dry_run)

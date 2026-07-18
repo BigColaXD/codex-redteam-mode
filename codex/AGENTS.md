@@ -11,9 +11,11 @@ This `AGENTS.md` remains as a compatibility layer for installs or environments t
 
 - default mode is `normal`
 - red-team mode is opt-in only
-- when red-team mode is enabled, prefer `phase -> router -> pack -> leaf`
+- when red-team mode is enabled, use `GoalContract -> WorkflowSpec -> ToolBroker -> EvidenceGraph -> TerminalJudge`
 - keep hooks lightweight
 - keep context compact
-- use `method` only when it adds value
-- loop decisions expose trigger, feedback gate, and exit condition
-- automation execution must pass Tool Registry, Scope Gate, and Executor adapter boundaries
+- keep the single boundary card outside workflow routing and terminal gates
+- consume verified artifact payloads and lineage references directly
+- resume durable pending actions without user copy/paste
+- terminal completion requires GoalContract predicates, cleanup proof, and evidence lineage
+- cancellation executes available cleanup and records its verified outcome

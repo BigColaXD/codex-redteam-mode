@@ -1,0 +1,91 @@
+[workflow]
+id = "binary-mobile-analysis"
+version = 1
+name = "Binary and mobile analysis"
+description = "Static and dynamic analysis with reproducible control-flow and impact evidence."
+match_tags = ["apk", "android", "ios", "binary", "firmware", "ida", "jadx", "逆向", "二进制", "固件", "移动端"]
+required_artifacts = ["binary_surface", "hypothesis_queue", "reproduction_artifact", "impact_proof", "coverage_report", "cleanup_proof", "final_report"]
+
+[[actions]]
+id = "inventory-binary"
+name = "Inventory binary structure and entrypoints"
+capabilities = ["binary_reverse", "apk_decompile", "android_static_analysis"]
+expected_artifact = "binary_surface"
+verifier = "surface_map"
+risk = "safe"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+parameters = { coverage_focus = ["headers and mitigations", "imports and exports", "entrypoints and exposed components", "persistence and protocol handlers", "embedded configuration and signing"] }
+
+[[actions]]
+id = "build-binary-hypotheses"
+name = "Build control-flow hypotheses"
+capabilities = ["reasoning", "code_generation"]
+expected_artifact = "hypothesis_queue"
+verifier = "hypothesis_queue"
+depends_on = ["inventory-binary"]
+risk = "safe"
+parameters = { prioritization = ["externally reachable control flow", "validation or trust decision", "unsafe memory or parser boundary", "credential or protocol path", "static/dynamic divergence"] }
+
+[[actions]]
+id = "validate-binary-path"
+name = "Validate the selected binary path"
+capabilities = ["controlled_validation", "binary_reverse", "test_harness"]
+expected_artifact = "reproduction_artifact"
+verifier = "reproduction_artifact"
+depends_on = ["build-binary-hypotheses"]
+risk = "safe"
+parameters = { validation_contract = ["preserve original sample", "record hashes and environment", "trace exact branch", "run matched control", "record modifications and rollback"] }
+
+[[actions]]
+id = "prove-binary-impact"
+name = "Prove binary behavior impact"
+capabilities = ["impact_analysis", "reasoning"]
+expected_artifact = "impact_proof"
+verifier = "impact_proof"
+depends_on = ["validate-binary-path"]
+risk = "safe"
+
+[[actions]]
+id = "review-binary-coverage"
+name = "Review binary analysis coverage"
+capabilities = ["coverage_analysis", "reasoning"]
+expected_artifact = "coverage_report"
+verifier = "coverage_report"
+depends_on = ["prove-binary-impact"]
+risk = "safe"
+
+[[actions]]
+id = "cleanup-binary"
+name = "Rollback local binary changes"
+capabilities = ["cleanup", "rollback"]
+expected_artifact = "cleanup_proof"
+verifier = "cleanup_proof"
+depends_on = ["review-binary-coverage"]
+risk = "safe"
+
+[[actions]]
+id = "report-binary"
+name = "Build the binary analysis report"
+capabilities = ["report_generation", "reasoning"]
+expected_artifact = "final_report"
+verifier = "final_report"
+depends_on = ["cleanup-binary"]
+risk = "safe"
+
+[[terminal_predicates]]
+kind = "workflow_actions_complete"
+subject = "required"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "reproduction_artifact"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "impact_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "cleanup_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "final_report"

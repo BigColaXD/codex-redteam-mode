@@ -1,0 +1,103 @@
+[workflow]
+id = "external-assessment"
+version = 1
+name = "External surface assessment"
+description = "Asset and service discovery followed by evidence-based validation."
+match_tags = ["recon", "domain", "host", "port", "network", "scan", "侦察", "域名", "端口", "网络", "扫描"]
+required_artifacts = ["asset_inventory", "service_fingerprint", "hypothesis_queue", "reproduction_artifact", "impact_proof", "coverage_report", "cleanup_proof", "final_report"]
+
+[[actions]]
+id = "inventory-assets"
+name = "Inventory reachable assets"
+capabilities = ["dns_resolve", "subdomain_enum", "target_intake"]
+expected_artifact = "asset_inventory"
+verifier = "surface_map"
+risk = "passive"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+parameters = { coverage_focus = ["asset provenance", "DNS and address relationships", "reachable hosts", "scope-linked subdomains"] }
+
+[[actions]]
+id = "fingerprint-services"
+name = "Fingerprint exposed services"
+capabilities = ["port_scan", "http_fingerprint", "page_fetch"]
+expected_artifact = "service_fingerprint"
+verifier = "surface_map"
+depends_on = ["inventory-assets"]
+risk = "active_low"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+
+[[actions]]
+id = "build-external-hypotheses"
+name = "Build attack-path hypotheses"
+capabilities = ["reasoning", "cve_search"]
+expected_artifact = "hypothesis_queue"
+verifier = "hypothesis_queue"
+depends_on = ["fingerprint-services"]
+risk = "safe"
+parameters = { prioritization = ["version confidence", "exposure and reachability", "configuration weakness", "credential or trust boundary", "CVE applicability with prerequisites"] }
+
+[[actions]]
+id = "validate-external-path"
+name = "Validate the selected external path"
+capabilities = ["controlled_validation", "page_fetch", "code_generation"]
+expected_artifact = "reproduction_artifact"
+verifier = "reproduction_artifact"
+depends_on = ["build-external-hypotheses"]
+risk = "active_medium"
+parameters = { validation_contract = ["prove service identity", "validate prerequisites", "use minimal deterministic probe", "run negative control", "record network effect and cleanup"] }
+
+[[actions]]
+id = "prove-external-impact"
+name = "Prove external impact"
+capabilities = ["impact_analysis", "reasoning"]
+expected_artifact = "impact_proof"
+verifier = "impact_proof"
+depends_on = ["validate-external-path"]
+risk = "active_low"
+
+[[actions]]
+id = "review-external-coverage"
+name = "Review attack-surface coverage"
+capabilities = ["coverage_analysis", "reasoning"]
+expected_artifact = "coverage_report"
+verifier = "coverage_report"
+depends_on = ["prove-external-impact"]
+risk = "safe"
+
+[[actions]]
+id = "cleanup-external"
+name = "Rollback and verify changes"
+capabilities = ["cleanup", "rollback"]
+expected_artifact = "cleanup_proof"
+verifier = "cleanup_proof"
+depends_on = ["review-external-coverage"]
+risk = "active_low"
+
+[[actions]]
+id = "report-external"
+name = "Build the external assessment report"
+capabilities = ["report_generation", "reasoning"]
+expected_artifact = "final_report"
+verifier = "final_report"
+depends_on = ["cleanup-external"]
+risk = "safe"
+
+[[terminal_predicates]]
+kind = "workflow_actions_complete"
+subject = "required"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "reproduction_artifact"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "impact_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "cleanup_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "final_report"

@@ -6,12 +6,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-18
+
 ### Added
 
+- Added the unified `GoalContract -> WorkflowSpec -> ToolBroker -> EvidenceGraph -> TerminalJudge` runtime with eight typed workflows and one non-routing boundary skill.
+- Added SQLite WAL persistence, schema metadata, append-only cursor-paginated events, operation/action leases, deterministic idempotency keys, and workflow fingerprint binding.
+- Added live stdio and Streamable HTTP MCP discovery, JSON/SSE handling, session IDs, pagination, schema-required argument checks, retries, and verified host-agent observation handoff.
+- Added `redteam_cancel` with cleanup execution and a persisted cleanup outcome, plus `waiting_goal_input` for incomplete goals.
+- Added deterministic atomic operation creation, actionable Host Agent output contracts, and `redteam_evidence` for on-demand retrieval of large verified payloads.
+- Added deterministic multi-target batch identities, aggregate `redteam_run` resume/observation, batch cancellation, and per-run cleanup verification.
+- Added exact per-target/per-domain Goal criteria and criterion-level evidence checks in reports, semantic verification, and TerminalJudge.
+- Added bounded complementary-tool discovery ensembles, input-schema capability inference, explicit MCP capability overrides, and phase/trigger/gate/exit action contracts.
+- Added Hook/runtime session-state synchronization and evidence schema v2 with independent multi-tool provenance plus legacy migration.
 - Added an App-compatible system-layer profile catalog. A static `model_instructions_file` now contains all configured GPT-5.x profiles plus a strict router, while every new conversation emits selector-only model metadata from `SessionStart`.
 - Added cross-platform `codex-redteam` launchers that detect the model before a new Codex process starts, generate a model-specific system instructions file, and pass it through a process-local `model_instructions_file` override.
 - Added independent per-session system files so concurrent GPT-5.5 and GPT-5.6 sessions do not overwrite each other's system prompt; launchers remove their temporary profile after Codex exits.
-- Added a `Stop` hook that records refusal detection from `last_assistant_message` and injects a one-time recovery overlay on the next active red-team prompt.
+
+### Changed
+
+- Removed the old router, orchestrator, automation worker, phase/pack/leaf state, domain-card exit gates, Stop Hook, refusal backstop, and 36 domain cards.
+- Reduced Hooks to mode/model selection and durable operation dispatch; Hooks never execute long actions or require users to relay tool results.
+- Reduced session state to the fields used by App/CLI dispatch and retained backward-compatible loading of older state JSON.
+- Preserved all cross-domain hints through Hook dispatch, restored source-order target extraction, and fixed URL/local-path overlap in per-target routing.
+- Split loop completion into cycle, stage, and workflow terminal states; `advance`, `deferred`, and `pivot` no longer terminate the full workflow.
+- Missing adapters now preserve a deferred action instead of returning a terminal blocked result.
+
+### Security
+
+- Added recursive secret redaction before Goal, event, result, and evidence persistence; POSIX runtime directories/files now use private permissions.
+- Added semantic evidence schemas, a 4 MiB evidence limit, target binding, verified-parent lineage, final-report ancestry, database/artifact cross-checks, and terminal integrity revalidation.
+- Added operation-level concurrency serialization, expired-lease recovery, global action budgets, cancellation cleanup, and fail-closed workflow drift detection.
+
+### Fixed
+
+- Serialized Hook/Runtime session-state updates with a shared cross-process lock, preventing concurrent read-modify-write loss while retaining atomic file replacement.
+- Tool-selection events and pending-capability decisions now use the same failed/successful-tool exclusion set as execution, with complementary-tool selection reported distinctly from failure fallback.
+- Removed permission-confirmation framing from the GPT-5.4/GPT-5.5 operational profiles; boundary text now treats targets as local fixtures and never asks for authorization paperwork.
 
 ## [1.3.0] - 2026-07-14
 
@@ -205,6 +236,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Managed incremental installer for Python and PowerShell.
 - Reference method layer and technology routing layer from three external skill repositories.
 
+[2.0.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v2.0.0
 [1.3.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.3.0
 [1.2.0]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.2.0
 [1.1.7]: https://github.com/chAng-L19/codex-redteam-mode/releases/tag/v1.1.7

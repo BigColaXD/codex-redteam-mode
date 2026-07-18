@@ -14,31 +14,13 @@ for candidate in (HOOKS_DIR, CODEX_DIR):
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
 
-from core import build_redteam_mode_overlay, emit_hook_json, extract_prompt, extract_session_id, is_pinned_model_compatible, load_runtime_state, parse_mode_command, parse_opsec_command, resolve_model_prompt_profile, save_runtime_state
+from core import emit_hook_json, extract_prompt, extract_session_id, is_pinned_model_compatible, load_runtime_state, parse_mode_command, parse_opsec_command, resolve_model_prompt_profile, save_runtime_state
 from core.controller import process_turn
 from core.prompt_parser import decode_stdin
-from core.refusal_backstop import build_recent_refusal_overlay
-from redteam_state import default_state
+from redteam_state import default_state, session_state_lock
 
 
-def main() -> None:
-    raw = decode_stdin(sys.stdin.buffer.read())
-    if not raw.strip():
-        return
-    try:
-        payload = json.loads(raw)
-    except Exception:
-        return
-    if not isinstance(payload, dict):
-        return
-
-    prompt = extract_prompt(payload)
-    if not prompt.strip():
-        return
-
-    session_id = extract_session_id(payload)
-    if not session_id:
-        return
+def _process_session(payload: dict, prompt: str, session_id: str) -> None:
     state = load_runtime_state(session_id=session_id)
     profile = resolve_model_prompt_profile(CODEX_DIR, payload=payload)
     catalog = "single-profile" if os.environ.get("CODEX_REDTEAM_PROFILE_MODE", "").casefold() == "single" else "static"
@@ -70,8 +52,7 @@ def main() -> None:
             print(
                 emit_hook_json(
                     "UserPromptSubmit",
-                    "[mode] Structured red-team routing disabled for future turns. "
-                    "No new phase/router/pack/leaf context will be injected. "
+                    "[mode] Durable red-team operation runtime disabled for future turns. "
                     "The base instruction.ctf.md profile and previous task context remain active. "
                     "The session state file remains stored with mode reset to normal. "
                     "Use /clear or start a new task to remove prior per-session context.\n"
@@ -89,17 +70,14 @@ def main() -> None:
             save_runtime_state(state, session_id=session_id)
             context = (
                 f"[mode] Red-team mode enabled ({mode}). Future prompts will use "
-                "phase -> router -> pack -> leaf routing until you explicitly disable it."
+                "GoalContract -> WorkflowSpec -> ToolBroker -> EvidenceGraph -> TerminalJudge execution "
+                "until explicitly disabled. The chain does not require copied user tool output."
             )
-            mode_overlay = build_redteam_mode_overlay(CODEX_DIR, mode)
-            if mode_overlay:
-                context = f"{context}\n{mode_overlay}"
             context = f"{context}\n{selector}"
             print(
                 emit_hook_json(
                     "UserPromptSubmit",
                     context,
-                    inject_prepoison=True,
                 )
             )
         return
@@ -126,13 +104,32 @@ def main() -> None:
     next_state.active_model = profile.model
     next_state.active_prompt_profile = profile.profile
     context = f"{result.brief}\n{selector}"
-    if state.pending_refusal_overlay:
-        context = f"{context}\n{build_recent_refusal_overlay()}"
-        next_state = replace(next_state, pending_refusal_overlay=False)
     if result.overlay:
         context = f"{context}\n{result.overlay}"
     save_runtime_state(next_state, session_id=session_id)
-    print(emit_hook_json("UserPromptSubmit", context, inject_role_overlay=True, role_phase=next_state.phase))
+    print(emit_hook_json("UserPromptSubmit", context))
+
+
+def main() -> None:
+    raw = decode_stdin(sys.stdin.buffer.read())
+    if not raw.strip():
+        return
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return
+    if not isinstance(payload, dict):
+        return
+
+    prompt = extract_prompt(payload)
+    if not prompt.strip():
+        return
+
+    session_id = extract_session_id(payload)
+    if not session_id:
+        return
+    with session_state_lock(session_id):
+        _process_session(payload, prompt, session_id)
 
 
 if __name__ == "__main__":

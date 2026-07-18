@@ -1,0 +1,91 @@
+[workflow]
+id = "identity-cloud-operation"
+version = 1
+name = "Identity and cloud operation"
+description = "Evidence-driven identity, directory, and cloud control-path assessment."
+match_tags = ["active-directory", "kerberos", "entra", "azure", "aws", "gcp", "iam", "ad", "域", "云", "身份"]
+required_artifacts = ["identity_surface", "hypothesis_queue", "reproduction_artifact", "impact_proof", "coverage_report", "cleanup_proof", "final_report"]
+
+[[actions]]
+id = "inventory-identity"
+name = "Inventory principals, roles, and trust edges"
+capabilities = ["identity_inventory", "cloud_inventory", "directory_inventory"]
+expected_artifact = "identity_surface"
+verifier = "surface_map"
+risk = "passive"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+parameters = { coverage_focus = ["principals and credentials", "roles and effective permissions", "trust and federation edges", "resource policies", "control-plane and data-plane paths"] }
+
+[[actions]]
+id = "build-identity-hypotheses"
+name = "Build privilege-path hypotheses"
+capabilities = ["reasoning", "graph_analysis"]
+expected_artifact = "hypothesis_queue"
+verifier = "hypothesis_queue"
+depends_on = ["inventory-identity"]
+risk = "safe"
+parameters = { prioritization = ["shortest privilege path", "cross-account or cross-tenant trust", "effective permission over declared role", "credential usability", "high-impact control plane"] }
+
+[[actions]]
+id = "validate-identity-path"
+name = "Validate the selected identity path"
+capabilities = ["controlled_validation", "identity_validation"]
+expected_artifact = "reproduction_artifact"
+verifier = "reproduction_artifact"
+depends_on = ["build-identity-hypotheses"]
+risk = "active_medium"
+parameters = { validation_contract = ["record starting identity", "validate each trust edge", "measure effective permission", "run non-privileged control", "rollback identity-side changes"] }
+
+[[actions]]
+id = "prove-identity-impact"
+name = "Prove effective privilege impact"
+capabilities = ["impact_analysis", "identity_validation"]
+expected_artifact = "impact_proof"
+verifier = "impact_proof"
+depends_on = ["validate-identity-path"]
+risk = "active_low"
+
+[[actions]]
+id = "review-identity-coverage"
+name = "Review identity and trust coverage"
+capabilities = ["coverage_analysis", "reasoning"]
+expected_artifact = "coverage_report"
+verifier = "coverage_report"
+depends_on = ["prove-identity-impact"]
+risk = "safe"
+
+[[actions]]
+id = "cleanup-identity"
+name = "Rollback identity-side changes"
+capabilities = ["cleanup", "rollback"]
+expected_artifact = "cleanup_proof"
+verifier = "cleanup_proof"
+depends_on = ["review-identity-coverage"]
+risk = "active_low"
+
+[[actions]]
+id = "report-identity"
+name = "Build the identity operation report"
+capabilities = ["report_generation", "reasoning"]
+expected_artifact = "final_report"
+verifier = "final_report"
+depends_on = ["cleanup-identity"]
+risk = "safe"
+
+[[terminal_predicates]]
+kind = "workflow_actions_complete"
+subject = "required"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "reproduction_artifact"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "impact_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "cleanup_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "final_report"

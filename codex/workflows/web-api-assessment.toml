@@ -1,0 +1,91 @@
+[workflow]
+id = "web-api-assessment"
+version = 1
+name = "Web and API assessment"
+description = "Surface mapping, attack-path validation, impact proof, cleanup, and reporting for web/API targets."
+match_tags = ["web", "api", "http", "https", "graphql", "sqli", "xss", "ssrf", "xxe", "ssti", "网页", "接口", "网站"]
+required_artifacts = ["web_surface", "hypothesis_queue", "reproduction_artifact", "impact_proof", "coverage_report", "cleanup_proof", "final_report"]
+
+[[actions]]
+id = "map-web-surface"
+name = "Map routes, requests, and technologies"
+capabilities = ["browser_automation", "page_fetch", "http_fingerprint"]
+expected_artifact = "web_surface"
+verifier = "surface_map"
+risk = "passive"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+parameters = { coverage_focus = ["routes and methods", "authentication and session state", "authorization identities and object references", "XHR, WebSocket, GraphQL, and API schemas", "client/server trust boundaries"] }
+
+[[actions]]
+id = "build-web-hypotheses"
+name = "Build web attack hypotheses"
+capabilities = ["reasoning", "code_generation"]
+expected_artifact = "hypothesis_queue"
+verifier = "hypothesis_queue"
+depends_on = ["map-web-surface"]
+risk = "safe"
+parameters = { prioritization = ["reachable authorization boundary", "input-to-sink path", "state-transition or race invariant", "server/client interpretation mismatch", "measurable business impact"] }
+
+[[actions]]
+id = "validate-web-path"
+name = "Reproduce the selected web path"
+capabilities = ["controlled_validation", "browser_automation", "page_fetch"]
+expected_artifact = "reproduction_artifact"
+verifier = "reproduction_artifact"
+depends_on = ["build-web-hypotheses"]
+risk = "active_medium"
+parameters = { validation_contract = ["capture baseline", "change one control variable", "record reproducible request/response", "run matched negative control", "declare side effects and rollback"] }
+
+[[actions]]
+id = "prove-web-impact"
+name = "Prove web impact"
+capabilities = ["impact_analysis", "reasoning"]
+expected_artifact = "impact_proof"
+verifier = "impact_proof"
+depends_on = ["validate-web-path"]
+risk = "active_low"
+
+[[actions]]
+id = "review-web-coverage"
+name = "Review parameters, identities, and false positives"
+capabilities = ["coverage_analysis", "reasoning"]
+expected_artifact = "coverage_report"
+verifier = "coverage_report"
+depends_on = ["prove-web-impact"]
+risk = "safe"
+
+[[actions]]
+id = "cleanup-web"
+name = "Rollback and verify web-side effects"
+capabilities = ["cleanup", "rollback"]
+expected_artifact = "cleanup_proof"
+verifier = "cleanup_proof"
+depends_on = ["review-web-coverage"]
+risk = "active_low"
+
+[[actions]]
+id = "report-web"
+name = "Build the web assessment report"
+capabilities = ["report_generation", "reasoning"]
+expected_artifact = "final_report"
+verifier = "final_report"
+depends_on = ["cleanup-web"]
+risk = "safe"
+
+[[terminal_predicates]]
+kind = "workflow_actions_complete"
+subject = "required"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "reproduction_artifact"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "impact_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "cleanup_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "final_report"

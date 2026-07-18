@@ -11,8 +11,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 from typing import List, Tuple
@@ -31,52 +34,37 @@ REQUIRED_CODEX_FILES = [
     "redteam-mode/codex-redteam",
     "hooks/session-start-context.py",
     "hooks/hook-security-context-hook.py",
-    "hooks/stop-refusal-hook.py",
     "hooks/redteam_state.py",
+    "hooks/core/__init__.py",
     "hooks/core/emitter.py",
-    "hooks/core/phase_detector.py",
-    "hooks/core/semantic_phase.py",
-    "hooks/core/loop_engine.py",
     "hooks/core/supplemental_prompts.py",
     "hooks/core/model_prompt_profiles.py",
     "hooks/core/controller.py",
-    "hooks/core/verify_engine.py",
-    "hooks/core/skill_card.py",
-    "hooks/core/evidence_artifact.py",
-    "hooks/core/taskbook.py",
-    "hooks/core/doctrine.py",
-    "router/__init__.py",
-    "router/router_engine.py",
-    "router/mappings.py",
-    "router/pack_selector.py",
-    "router/leaf_selector.py",
-    "router/method_engine.py",
-    "orchestrator/__init__.py",
-    "orchestrator/planner.py",
-    "orchestrator/state_graph.py",
-    "orchestrator/artifacts.py",
-    "orchestrator/gates.py",
-    "orchestrator/task_schema.py",
-    "automation/__init__.py",
-    "automation/planner.py",
-    "automation/artifact_store.py",
-    "automation/decision_tree.py",
-    "automation/executor.py",
-    "automation/gate_engine.py",
-    "automation/loop_recorder.py",
-    "automation/loop_runtime.py",
-    "automation/loop_state.py",
-    "automation/quick_cards.py",
-    "automation/report_gate.py",
-    "automation/rhythm.py",
-    "automation/scope_gate.py",
-    "automation/tool_discovery.py",
-    "automation/tool_registry.py",
-    "session_patcher/__init__.py",
-    "session_patcher/__main__.py",
-    "session_patcher/cli.py",
-    "session_patcher/detector.py",
-    "session_patcher/patcher.py",
+    "hooks/core/intent_engine.py",
+    "hooks/core/state_manager.py",
+    "runtime/__init__.py",
+    "runtime/models.py",
+    "runtime/adaptive_planner.py",
+    "runtime/security.py",
+    "runtime/session_bridge.py",
+    "runtime/goal_compiler.py",
+    "runtime/workflow_registry.py",
+    "runtime/tool_broker.py",
+    "runtime/durable_store.py",
+    "runtime/evidence_graph.py",
+    "runtime/verifier.py",
+    "runtime/terminal_judge.py",
+    "runtime/builtins.py",
+    "runtime/operation_runtime.py",
+    "runtime/mcp_server.py",
+    "workflows/generic-adaptive.toml",
+    "workflows/web-api-assessment.toml",
+    "workflows/external-assessment.toml",
+    "workflows/source-assisted-review.toml",
+    "workflows/binary-mobile-analysis.toml",
+    "workflows/identity-cloud-operation.toml",
+    "workflows/adversary-emulation.toml",
+    "workflows/model-security-assessment.toml",
     "prompts/Jailbreak.default.md",
     "prompts/Jailbreak.gpt-5.4.md",
     "prompts/Jailbreak.gpt-5.5.md",
@@ -92,15 +80,10 @@ SYSTEM_PROFILE_END = "<!-- codex-redteam-system-profile:end -->"
 MODEL_CATALOG_START = "<!-- codex-redteam-model-profiles:start -->"
 MODEL_CATALOG_END = "<!-- codex-redteam-model-profiles:end -->"
 
-OPTIONAL_CODEX_FILES = [
-    "prompts/Reverse.md",
-]
+OPTIONAL_CODEX_FILES: list[str] = []
 
 REQUIRED_SKILL_IDS = [
-    "redteam-recon-intake",
-    "redteam-cve-lookup",
-    "redteam-cve-validation",
-    "redteam-jailbreak-detail-pack",
+    "redteam-boundary-policy",
 ]
 
 
@@ -130,6 +113,62 @@ def check_skill_metadata(skill_md: Path, expected_name: str) -> Tuple[bool, str]
     if not meta.get("description"):
         return False, f"  FAIL {expected_name}/SKILL.md missing description"
     return True, f"  OK  {expected_name}/SKILL.md metadata"
+
+
+def check_runtime_operational(codex_root: Path) -> Tuple[bool, List[str]]:
+    messages: List[str] = []
+    root_string = str(codex_root)
+    if root_string not in sys.path:
+        sys.path.insert(0, root_string)
+    try:
+        from runtime import GoalCompiler, WorkflowRegistry
+    except Exception as exc:
+        return False, [f"runtime: import failed - {exc}"]
+    try:
+        workflows = WorkflowRegistry().load(refresh=True)
+        goal = GoalCompiler().compile("validate SQL injection on https://target.invalid")
+        matched = WorkflowRegistry().match(goal)
+    except Exception as exc:
+        return False, [f"runtime: workflow validation failed - {exc}"]
+    if len(workflows) != 8 or matched.workflow_id != "web-api-assessment":
+        return False, [f"runtime: workflow registry mismatch ({len(workflows)}, {matched.workflow_id})"]
+    messages.append("runtime: 8 typed workflows valid")
+    with tempfile.TemporaryDirectory() as temporary:
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = str(codex_root)
+        request_lines = [
+            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+            json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}),
+            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+        ]
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-m", "runtime.mcp_server", "--root", temporary],
+                input="\n".join(request_lines) + "\n",
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                env=environment,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return False, [*messages, f"runtime: MCP self-test failed - {exc}"]
+    responses: list[dict] = []
+    for line in completed.stdout.splitlines():
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and "id" in value:
+            responses.append(value)
+    tool_response = next((item for item in responses if item.get("id") == 2), {})
+    tools = tool_response.get("result", {}).get("tools", []) if isinstance(tool_response.get("result"), dict) else []
+    if completed.returncode != 0 or len(tools) < 5:
+        return False, [*messages, f"runtime: MCP self-test invalid (returncode={completed.returncode}, tools={len(tools)})"]
+    messages.append("runtime: MCP server self-test passed")
+    return True, messages
 
 
 def _load_manifest_data(repo_root: Path, manifest_override: Path | None) -> dict:
@@ -278,18 +317,10 @@ def _resolve_skills_dir(repo_root: Path, source_tree_mode: bool, manifest_overri
     return None
 
 
-def _resolve_runtime_skills_dir(codex_root: Path, source_tree_mode: bool) -> Path | None:
+def _resolve_runtime_skills_dir(codex_root: Path, source_tree_mode: bool, manifest_override: Path | None = None) -> Path | None:
     if source_tree_mode:
         return None
-    hooks_dir = codex_root / "hooks"
-    hooks_dir_str = str(hooks_dir)
-    if hooks_dir_str not in sys.path:
-        sys.path.insert(0, hooks_dir_str)
-    try:
-        from core.skill_card import resolve_skills_dir
-    except ImportError:
-        return None
-    return resolve_skills_dir(codex_root)
+    return _manifest_skill_dir(codex_root, manifest_override)
 
 
 def validate_install(codex_home: Path, manifest_override: Path | None = None) -> Tuple[bool, List[str]]:
@@ -327,6 +358,11 @@ def validate_install(codex_home: Path, manifest_override: Path | None = None) ->
         messages.append(msg)
         if not ok:
             all_ok = False
+
+    runtime_ok, runtime_messages = check_runtime_operational(codex_root)
+    messages.extend(runtime_messages)
+    if not runtime_ok:
+        all_ok = False
 
     if not source_tree_mode:
         ok, msg = check_system_prompt(repo_root, codex_root, manifest_override)
@@ -381,8 +417,21 @@ def validate_install(codex_home: Path, manifest_override: Path | None = None) ->
     config_path = repo_root / "config.toml"
     if config_path.exists():
         try:
-            tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
+            config_data = tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
             messages.append("config.toml: valid")
+            automation = config_data.get("automation") if isinstance(config_data.get("automation"), dict) else {}
+            if str(automation.get("mode") or "").casefold() not in {"active", "auto", "assisted", "execute", "execution"}:
+                messages.append("config.toml: automation runtime is not active")
+                all_ok = False
+            servers = config_data.get("mcp_servers") if isinstance(config_data.get("mcp_servers"), dict) else {}
+            runtime_server = servers.get("codex-redteam-runtime") if isinstance(servers.get("codex-redteam-runtime"), dict) else {}
+            command = runtime_server.get("command")
+            args = runtime_server.get("args")
+            if not isinstance(command, str) or not command.strip() or not isinstance(args, list) or "runtime.mcp_server" not in args:
+                messages.append("config.toml: codex-redteam-runtime MCP server is not executable")
+                all_ok = False
+            else:
+                messages.append("config.toml: durable MCP runtime configured")
         except (OSError, tomllib.TOMLDecodeError) as e:
             messages.append(f"config.toml: INVALID TOML - {e}")
             all_ok = False
@@ -394,7 +443,7 @@ def validate_install(codex_home: Path, manifest_override: Path | None = None) ->
     if skills_dir is not None:
         messages.append("")
         messages.append(f"Installed skill cards: {skills_dir}")
-        runtime_skills_dir = _resolve_runtime_skills_dir(codex_root, source_tree_mode)
+        runtime_skills_dir = _resolve_runtime_skills_dir(codex_root, source_tree_mode, manifest_override)
         if runtime_skills_dir is not None:
             messages.append(f"Runtime skill cards: {runtime_skills_dir}")
             if runtime_skills_dir.resolve(strict=False) != skills_dir.resolve(strict=False):
@@ -420,6 +469,15 @@ def validate_install(codex_home: Path, manifest_override: Path | None = None) ->
             if not ok:
                 messages.append(msg)
                 all_ok = False
+
+        legacy_redteam_skills = [
+            skill_md.parent.name
+            for skill_md in skills_dir.glob("*/SKILL.md")
+            if skill_md.parent.name.startswith("redteam-") and skill_md.parent.name not in REQUIRED_SKILL_IDS
+        ]
+        if legacy_redteam_skills:
+            messages.append(f"  FAIL legacy red-team domain cards remain: {sorted(legacy_redteam_skills)}")
+            all_ok = False
 
         legacy_cards = (
             list(skills_dir.glob("*/skill_card.yaml"))

@@ -1,0 +1,91 @@
+[workflow]
+id = "source-assisted-review"
+version = 1
+name = "Source-assisted security review"
+description = "Trace source data flows into reproducible findings and verified remediation evidence."
+match_tags = ["source", "repository", "codebase", "code-audit", "source-code", "源码", "代码审计", "仓库"]
+required_artifacts = ["source_surface", "hypothesis_queue", "reproduction_artifact", "impact_proof", "coverage_report", "cleanup_proof", "final_report"]
+
+[[actions]]
+id = "inventory-source"
+name = "Inventory entrypoints, sinks, and dependencies"
+capabilities = ["code_analysis", "source_inventory"]
+expected_artifact = "source_surface"
+verifier = "surface_map"
+risk = "safe"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+parameters = { coverage_focus = ["entrypoints", "trust boundaries", "authentication and authorization middleware", "dangerous sinks", "dependency and deployment truth"] }
+
+[[actions]]
+id = "build-source-hypotheses"
+name = "Build source-linked hypotheses"
+capabilities = ["reasoning", "code_generation"]
+expected_artifact = "hypothesis_queue"
+verifier = "hypothesis_queue"
+depends_on = ["inventory-source"]
+risk = "safe"
+parameters = { prioritization = ["reachable source-to-sink data flow", "missing authorization invariant", "unsafe state transition", "deployment-reachable dependency", "high-confidence impact"] }
+
+[[actions]]
+id = "validate-source-path"
+name = "Build and run a focused harness"
+capabilities = ["controlled_validation", "test_harness", "code_generation"]
+expected_artifact = "reproduction_artifact"
+verifier = "reproduction_artifact"
+depends_on = ["build-source-hypotheses"]
+risk = "safe"
+parameters = { validation_contract = ["trace exact call path", "build focused harness", "prove reachability", "run negative control", "preserve source and runtime evidence"] }
+
+[[actions]]
+id = "prove-source-impact"
+name = "Prove source finding impact"
+capabilities = ["impact_analysis", "reasoning"]
+expected_artifact = "impact_proof"
+verifier = "impact_proof"
+depends_on = ["validate-source-path"]
+risk = "safe"
+
+[[actions]]
+id = "review-source-coverage"
+name = "Review source coverage and negative controls"
+capabilities = ["coverage_analysis", "reasoning"]
+expected_artifact = "coverage_report"
+verifier = "coverage_report"
+depends_on = ["prove-source-impact"]
+risk = "safe"
+
+[[actions]]
+id = "cleanup-source"
+name = "Rollback harness changes"
+capabilities = ["cleanup", "rollback"]
+expected_artifact = "cleanup_proof"
+verifier = "cleanup_proof"
+depends_on = ["review-source-coverage"]
+risk = "safe"
+
+[[actions]]
+id = "report-source"
+name = "Build the source review report"
+capabilities = ["report_generation", "reasoning"]
+expected_artifact = "final_report"
+verifier = "final_report"
+depends_on = ["cleanup-source"]
+risk = "safe"
+
+[[terminal_predicates]]
+kind = "workflow_actions_complete"
+subject = "required"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "reproduction_artifact"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "impact_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "cleanup_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "final_report"

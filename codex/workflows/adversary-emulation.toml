@@ -1,0 +1,91 @@
+[workflow]
+id = "adversary-emulation"
+version = 1
+name = "Adversary emulation"
+description = "Execute an ATT&CK-tagged operation with atomic actions, rollback, and coverage evidence."
+match_tags = ["emulation", "adversary-emulation", "atomic", "ttp", "purple-team", "对抗模拟", "攻击链", "紫队"]
+required_artifacts = ["operation_surface", "hypothesis_queue", "reproduction_artifact", "impact_proof", "coverage_report", "cleanup_proof", "final_report"]
+
+[[actions]]
+id = "inventory-operation"
+name = "Inventory operation prerequisites"
+capabilities = ["environment_inventory", "target_intake"]
+expected_artifact = "operation_surface"
+verifier = "surface_map"
+risk = "passive"
+tool_strategy = "capability_coverage"
+min_tool_results = 1
+max_tool_results = 3
+parameters = { coverage_focus = ["objective and target assets", "available atomic tests", "telemetry sources", "rollback prerequisites", "ATT&CK technique coverage"] }
+
+[[actions]]
+id = "select-techniques"
+name = "Select ATT&CK-linked atomic actions"
+capabilities = ["reasoning", "attack_mapping"]
+expected_artifact = "hypothesis_queue"
+verifier = "hypothesis_queue"
+depends_on = ["inventory-operation"]
+risk = "safe"
+parameters = { prioritization = ["objective relevance", "atomicity and reversibility", "telemetry value", "dependency readiness", "minimum-noise proof"] }
+
+[[actions]]
+id = "execute-techniques"
+name = "Execute selected atomic actions"
+capabilities = ["technique_execution", "controlled_validation"]
+expected_artifact = "reproduction_artifact"
+verifier = "reproduction_artifact"
+depends_on = ["select-techniques"]
+risk = "active_medium"
+parameters = { validation_contract = ["execute one atomic technique at a time", "capture before and after state", "bind telemetry to action", "run control where applicable", "execute declared cleanup"] }
+
+[[actions]]
+id = "prove-emulation-impact"
+name = "Prove operation outcomes"
+capabilities = ["impact_analysis", "telemetry_analysis"]
+expected_artifact = "impact_proof"
+verifier = "impact_proof"
+depends_on = ["execute-techniques"]
+risk = "active_low"
+
+[[actions]]
+id = "review-emulation-coverage"
+name = "Review ATT&CK and detection coverage"
+capabilities = ["coverage_analysis", "attack_mapping"]
+expected_artifact = "coverage_report"
+verifier = "coverage_report"
+depends_on = ["prove-emulation-impact"]
+risk = "safe"
+
+[[actions]]
+id = "cleanup-emulation"
+name = "Run atomic cleanup and verify state"
+capabilities = ["cleanup", "rollback"]
+expected_artifact = "cleanup_proof"
+verifier = "cleanup_proof"
+depends_on = ["review-emulation-coverage"]
+risk = "active_low"
+
+[[actions]]
+id = "report-emulation"
+name = "Build the operation report"
+capabilities = ["report_generation", "reasoning"]
+expected_artifact = "final_report"
+verifier = "final_report"
+depends_on = ["cleanup-emulation"]
+risk = "safe"
+
+[[terminal_predicates]]
+kind = "workflow_actions_complete"
+subject = "required"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "reproduction_artifact"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "impact_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "cleanup_proof"
+[[terminal_predicates]]
+kind = "artifact_verified"
+subject = "final_report"
