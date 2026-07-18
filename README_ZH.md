@@ -1,5 +1,7 @@
 # Codex 红队模式
 
+[English](./README.md)
+
 一个适配 Codex App 与 Codex CLI 的、显式开启的持久化红队执行运行时。
 
 项目会把用户目标编译为带目标级成功准则的类型化 `GoalContract`，通过真实 MCP 工具执行单领域、跨领域或多目标批次 `WorkflowSpec`，保存证据图，支持中断恢复，并且只在 `TerminalJudge` 证明全部准则后进入完成状态。
