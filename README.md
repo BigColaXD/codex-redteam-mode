@@ -233,17 +233,28 @@ scripts/             transactional installer and validator
 tests/               runtime, adversarial, Hook, and install tests
 ```
 
+## Contributions & Acknowledgements
 
+### Individual Contributors
 
-## Acknowledgements
-Individual Contributors
-Mingxi / 洺熙 — suggested adding semantic judgment as fallback for phase detection (2026-05-07); proposed removing the methodology layer and subdividing skills for smarter AI behavior during work phases (2026-05-14)
-Nirvana — proposed workflow optimization with overlay installation enablement (2026-05-11)
-PINGS — offered jailbreak text enhancements and robustness improvements (2026-05-16)
-Reference Projects
+- **Mingxi / 洺熙** — suggested adding semantic judgment as fallback for phase detection; proposed removing methodology while subdividing skills for smarter AI behavior
+- **Nirvana** — proposed workflow optimization with overlay installation enablement
+- **PINGS** — offered prompt-chain robustness review
+
+### Reference Projects
+
 Method layer, routing layer, and skill pack structure draw inspiration from:
 
-qiushi-skill
-yaklang/hack-skills
-mukul975/Anthropic-Cybersecurity-Skills
-Thank you to all contributors and reference projects that helped shape this repository.
+- [qiushi-skill](https://github.com/qiushi-L/qiushi-skill)
+- [yaklang/hack-skills](https://github.com/yaklang/hack-skills)
+- [mukul975/Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
+- [MDX-Tom/gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+
+## License
+
+[MIT](./LICENSE)
+
