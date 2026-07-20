@@ -216,10 +216,6 @@ The earlier routing/Skill design and current runtime research drew from:
 - [Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
 - [gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
 
-## Star History
-
-[![Star History Chart](https://api.star-history.com/chart?repos=chAng-L19/codex-redteam-mode&type=date&legend=top-left&sealed_token=vtK9JjZbiiCcgSy23On2AdE44y6lVqUOF5PPuapuRlm3PCfglw47PP4TV2kr_HUlRHRgc2sQYwaE6RWlRvW3uXiT63nObD9t46uWwrT_3FWc_8Vaa8k3qA)](https://www.star-history.com/?repos=chAng-L19%2Fcodex-redteam-mode&type=date&legend=top-left)
-
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow, coding conventions, and submission requirements.
