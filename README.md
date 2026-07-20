@@ -216,6 +216,16 @@ The earlier routing/Skill design and current runtime research drew from:
 - [Anthropic-Cybersecurity-Skills](https://github.com/mukul975/Anthropic-Cybersecurity-Skills)
 - [gpt-5.6-instruct](https://github.com/MDX-Tom/gpt-5.6-instruct)
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=chAng-L19%2Fcodex-redteam-mode&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=chAng-L19/codex-redteam-mode&type=date&theme=dark&legend=top-left&sealed_token=CKO8uuC9r4XaKg8t4S3lVosw8UEFEOEmUKhK1gspPwDXctFtdeVgYQ-aWPH8rWLhIDCaZUmPasrE5qceMhl1M-dDRmHrpHDJ1lg4ZYhqGWAqYv8mcUdVEQ" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=chAng-L19/codex-redteam-mode&type=date&legend=top-left&sealed_token=CKO8uuC9r4XaKg8t4S3lVosw8UEFEOEmUKhK1gspPwDXctFtdeVgYQ-aWPH8rWLhIDCaZUmPasrE5qceMhl1M-dDRmHrpHDJ1lg4ZYhqGWAqYv8mcUdVEQ" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=chAng-L19/codex-redteam-mode&type=date&legend=top-left&sealed_token=CKO8uuC9r4XaKg8t4S3lVosw8UEFEOEmUKhK1gspPwDXctFtdeVgYQ-aWPH8rWLhIDCaZUmPasrE5qceMhl1M-dDRmHrpHDJ1lg4ZYhqGWAqYv8mcUdVEQ" />
+ </picture>
+</a>
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow, coding conventions, and submission requirements.
